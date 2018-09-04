@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# @Time        : 2018/9/3 18:24
+# @Time        : 2018/9/4 17:00
 # @Author      : panxiaotong
-# @Description : probabilistic skip-gram
+# @Description : upgrade PGM with merging weighted linguistic embedding by full connection layer
 
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -236,13 +236,20 @@ class PSGModel():
                         tf.matmul(self.partofspeech_merge_weight, tf.reshape(partofspeech_embed_init, shape=[cfg.partofspeech_embedding_size, -1]))], axis=0),
                     shape = [cfg.batch_size, -1])
                 print("attention_concat shape is %s" % attention_concat.get_shape())
-                c_attention = tf.reduce_sum(tf.reshape(tf.multiply(alpha_attention_tile, attention_concat),
-                            shape=[cfg.batch_size, cfg.target_lstm_hidden_size, -1]), axis=2)
+                c_attention = tf.multiply(alpha_attention_tile, attention_concat)
                 print("c_attention shape is %s" % c_attention.get_shape())
-                cur_node = tf.reduce_sum(tf.square(tf.multiply(target_lstm, c_attention)), 1)
-                print("cur_node shape is %s" % cur_node.get_shape())
-                final_softmax_list.append(cur_node)
-            final_softmax = tf.nn.softmax(tf.reshape(tf.convert_to_tensor(final_softmax_list), shape=[cfg.batch_size, -1]), axis=1)
+                final_softmax_list.append(c_attention)
+            final_softmax_list = tf.reshape(tf.convert_to_tensor(final_softmax_list), shape=[cfg.batch_size, -1])
+            print("final_softmax_list shape is %s" % final_softmax_list.get_shape())
+
+            with tf.variable_scope("proj_layer"):
+                self.proj_layer = tf.get_variable(
+                    'proj_layer',
+                    shape=(cfg.context_window_size * cfg.target_lstm_hidden_size * 5, cfg.context_window_size),
+                    initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
+                    dtype='float32'
+                )
+            final_softmax = tf.nn.softmax(tf.matmul(final_softmax_list, self.proj_layer), axis=1)
             print("final_softmax shape is %s" % final_softmax.get_shape())
             self.cross_entropy_loss = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target_prob, logits=final_softmax))
             print("cross_entropy_loss shape is %s" % self.cross_entropy_loss.get_shape())
