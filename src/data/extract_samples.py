@@ -120,7 +120,12 @@ if __name__ == "__main__":
 
                 if cur_word not in DBPedia_dict:
                     r = requests.get(DBPedia_url + cur_word, headers=DBPedia_header)
-                    json_obj = json.loads(str(r.text))
+                    try:
+                        json_obj = json.loads(str(r.text))
+                    except Exception,err:
+                        kb_entity_output.write("0\n")
+                        word_index += 1
+                        continue
                     if "Resources" not in json_obj:
                         kb_entity_output.write("0\n")
                         DBPedia_dict[cur_word] = "0"
@@ -144,7 +149,6 @@ if __name__ == "__main__":
                 else:
                     kb_entity_output.write(DBPedia_dict[cur_word] + "\n")
                 word_index += 1
-            break
         f.close()
 
     word_output.close()

@@ -16,6 +16,59 @@ parser_dictionary_size = 0
 partofspeech_dictionary_size = 0
 kb_relation_dictionary_size = 0
 
+target = []
+context = []
+pos = []
+parser = []
+dict_desc = []
+kb_entity = []
+def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file, kb_entity_file):
+    global target, context, pos, parser, dict_desc, kb_entity
+    with open(target_file, 'r') as f:
+        for line in f:
+            target.appen(line.replace('\r\n'))
+        f.close()
+    with open(context_file, 'r') as f:
+        for line in f:
+            context.append(line.replace('\r\n').split(','))
+        f.close()
+    with open(pos_file, 'r') as f:
+        for line in f:
+            pos.append(line.replace('\r\n'))
+        f.close()
+    with open(parser_file, 'r') as f:
+        for line in f:
+            parser.append(line.replace('\r\n').split(','))
+        f.close()
+    with open(dict_desc_file, 'r') as f:
+        for line in f:
+            elements = line.replace('\r\n').split(',')
+            desc_len = len(elements)
+            dict_desc_list = []
+            if desc_len >= cfg.dict_time_step:
+                for index, item in enumerate(elements):
+                    if index >= cfg.dict_time_step:
+                        break
+                    dict_desc_list.append(item)
+            else:
+                dict_desc_list = elements.copy()
+                remain_len = cfg.dict_time_step - desc_len
+                for i in range(remain_len):
+                    dict_desc_list.append(0)
+            dict_desc.append(dict_desc_list)
+        f.close()
+    with open(kb_entity_file, 'r') as f:
+        for line in f:
+            kb_entity.append(line.replace('\r\n'))
+        f.close()
+
+    target = np.asarray(target)
+    context = np.asarray(context)
+    pos = np.asarray(pos)
+    parser = np.asarray(parser)
+    dict_desc = np.asarray(dict_desc)
+    kb_entity = np.asarray(kb_entity)
+
 class PSGModel():
     def __init__(self, sess):
         self.word = tf.placeholder(shape=[cfg.batch_size], dtype=tf.int32)
@@ -315,42 +368,20 @@ class PSGModel():
         return self.sess.run(self.word_embed_weight, feed_dict={})
 
 if __name__ == '__main__':
-    '''
-    if len(sys.argv) < 6:
-        print("position_emb <input file> <dict file> <related file> <output model> <word emb model>")
+    if len(sys.argv) < 8:
+        print("probabilistic_skip_gram_v3 <target> <context> <part-of-speech> <parser> "
+              "<dictionary desc> <kb entity> <word emb output>")
         sys.exit()
-    '''
 
-    '''
-    load_sample(sys.argv[1], sys.argv[2], sys.argv[3])
-    total_sample_size = word1_list.shape[0]
+    load_sample(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+    total_sample_size = target.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
     train_set_size_fake = int(total_batch_size * 1)
 
-    targets = np.zeros(shape=[word2_list.shape[0]])
-    labels = np.zeros(shape=[word2_list.shape[0], cfg.negative_sample_size + 1])
-    outer_accu = 0
-    for index, word in enumerate(word2_list):
-        sub_labels = np.zeros(shape=[cfg.negative_sample_size + 1])
-        iter = 0
-        sub_labels[iter] = word2_list[index]
-        iter += 1
-        while iter <= cfg.negative_sample_size:
-            r = random.randint(1, word_dictionary_size)
-            if r not in related_dict[word]:
-                sub_labels[iter] = r
-                iter += 1
-        np.random.shuffle(sub_labels)    # shuffle positive and negative samples
-        labels[index] = sub_labels
-        for sub_index, elem in enumerate(sub_labels):
-            if elem == word2_list[index]:
-                targets[index] = sub_index
-                break
+    print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d' %
+          (total_batch_size, train_set_size, word_dictionary_size))
 
-    print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d, new_labels size is %d,'
-          'word1_list size is %d, new_target size is %d' %
-          (total_batch_size, train_set_size, word_dictionary_size, labels.shape[0], word1_list.shape[0], targets.shape[0]))
     '''
     word_dictionary_size = 1000
     parser_dictionary_size = 50
@@ -367,6 +398,7 @@ if __name__ == '__main__':
     context_info = np.random.randint(word_dictionary_size,
                                      size=(total_batch_size * cfg.batch_size, cfg.context_window_size))
     context_info_prob = np.random.rand(total_batch_size * cfg.batch_size, cfg.context_window_size)
+    '''
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
@@ -382,12 +414,12 @@ if __name__ == '__main__':
                 if trainable is True:
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
-                _, iter_loss = PSGModelObj.train(word[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 dictionary[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 kb_relation[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                _, iter_loss = PSGModelObj.train(target[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                 dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                 kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 partofspeech[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 context_info[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                 pos[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                 context[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  context_info_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
                 loss_sum += iter_loss
             print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size / total_batch_size))
@@ -396,13 +428,13 @@ if __name__ == '__main__':
 
             accuracy = 0.0
             for j in range(total_batch_size):
-                iter_accuracy = PSGModelObj.validate(word[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 dictionary[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 kb_relation[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 partofspeech[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 context_info[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 context_info_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
+                iter_accuracy = PSGModelObj.validate(target[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                     dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                     kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                     parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                     pos[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                     context[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                                                    context_info_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
                 accuracy += iter_accuracy
             print("iter %d : accuracy %f" % (epoch_index, accuracy / total_batch_size / cfg.batch_size))
             test_accuracy = PSGModelObj.get_accuracy_summary(accuracy / total_batch_size / cfg.batch_size)
