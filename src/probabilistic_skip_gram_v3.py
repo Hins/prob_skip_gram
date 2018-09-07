@@ -18,19 +18,58 @@ kb_relation_dictionary_size = 0
 
 target = []
 context = []
+context_prob = []
 pos = []
 parser = []
 dict_desc = []
 kb_entity = []
-def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file, kb_entity_file):
-    global target, context, pos, parser, dict_desc, kb_entity
+def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file, kb_entity_file, word_count_file, word_coocur_file):
+    global target, context, context_prob, pos, parser, dict_desc, kb_entity
+    word_count_dict = {}
+    word_coocur_dict = {}
+    with open(word_count_file, 'r') as f:
+        for line in f:
+            elements = line.strip('\r\n').split('\t')
+            word_count_dict[elements[0]] = int(elements[1])
+        f.close()
+    with open(word_coocur_file, 'r') as f:
+        for line in f:
+            elements = line.strip('\r\n').split('\t')
+            word_coocur_dict[elements[0]] = int(elements[1])
+        f.close()
     with open(target_file, 'r') as f:
         for line in f:
-            target.appen(line.replace('\r\n'))
+            target.append(line.replace('\r\n'))
         f.close()
     with open(context_file, 'r') as f:
-        for line in f:
-            context.append(line.replace('\r\n').split(','))
+        for index, line in enumerate(f):
+            context_word_ids = line.replace('\r\n').split(',')
+            context.append(context_word_ids)
+            sub_context_prob = []
+            if target[index] not in word_count_dict:
+                for i in range(len(context_word_ids)):
+                    sub_context_prob.append(1.0 / float(cfg.context_window_size))
+            else:
+                x_i = word_count_dict[target[index]]
+                accumulate_count = 0
+                for co_word in context_word_ids:
+                    co_name1 = target[index] + cfg.coocur_separator + co_word
+                    co_name2 = co_word + cfg.coocur_separator + target[index]
+                    if co_name1 in word_coocur_dict:
+                        sub_context_prob.append(word_coocur_dict[co_name1])
+                        accumulate_count += word_coocur_dict[co_name1]
+                    elif co_name2 in word_coocur_dict:
+                        sub_context_prob.append(word_coocur_dict[co_name2])
+                        accumulate_count += word_coocur_dict[co_name2]
+                    else:
+                        sub_context_prob.append(0)
+                if accumulate_count == 0:
+                    sub_context_prob = []
+                    for i in range(len(context_word_ids)):
+                        sub_context_prob.append(1.0 / float(cfg.context_window_size))
+                else:
+                    sub_context_prob = [float(item) / float(accumulate_count) for item in sub_context_prob]
+            context_prob.append(sub_context_prob)
         f.close()
     with open(pos_file, 'r') as f:
         for line in f:
@@ -64,6 +103,7 @@ def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file
 
     target = np.asarray(target)
     context = np.asarray(context)
+    context_prob = np.asarray(context_prob)
     pos = np.asarray(pos)
     parser = np.asarray(parser)
     dict_desc = np.asarray(dict_desc)
@@ -368,12 +408,12 @@ class PSGModel():
         return self.sess.run(self.word_embed_weight, feed_dict={})
 
 if __name__ == '__main__':
-    if len(sys.argv) < 8:
+    if len(sys.argv) < 10:
         print("probabilistic_skip_gram_v3 <target> <context> <part-of-speech> <parser> "
-              "<dictionary desc> <kb entity> <word emb output>")
+              "<dictionary desc> <kb entity> <word count dict> <word coocur dict> <word emb output>")
         sys.exit()
 
-    load_sample(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+    load_sample(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8])
     total_sample_size = target.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
@@ -381,24 +421,6 @@ if __name__ == '__main__':
 
     print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d' %
           (total_batch_size, train_set_size, word_dictionary_size))
-
-    '''
-    word_dictionary_size = 1000
-    parser_dictionary_size = 50
-    partofspeech_dictionary_size = 50
-    kb_relation_dictionary_size = 500
-    total_batch_size = 100
-    word = np.random.randint(word_dictionary_size, size=(total_batch_size * cfg.batch_size))
-    dictionary = np.random.randint(word_dictionary_size, size=(total_batch_size * cfg.batch_size, cfg.dict_time_step))
-    kb_relation = np.random.randint(kb_relation_dictionary_size,
-                                    size=(total_batch_size * cfg.batch_size, cfg.kb_relation_length))
-    parser = np.random.randint(parser_dictionary_size,
-                               size=(total_batch_size * cfg.batch_size, cfg.context_window_size))
-    partofspeech = np.random.randint(partofspeech_dictionary_size, size=(total_batch_size * cfg.batch_size))
-    context_info = np.random.randint(word_dictionary_size,
-                                     size=(total_batch_size * cfg.batch_size, cfg.context_window_size))
-    context_info_prob = np.random.rand(total_batch_size * cfg.batch_size, cfg.context_window_size)
-    '''
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
@@ -420,7 +442,7 @@ if __name__ == '__main__':
                                                  parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  pos[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  context[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 context_info_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
+                                                 context_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
                 loss_sum += iter_loss
             print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size / total_batch_size))
             train_loss = PSGModelObj.get_loss_summary(np.sum(loss_sum) / cfg.batch_size / total_batch_size)
@@ -434,7 +456,7 @@ if __name__ == '__main__':
                                                      parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                      pos[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                      context[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                    context_info_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
+                                                     context_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
                 accuracy += iter_accuracy
             print("iter %d : accuracy %f" % (epoch_index, accuracy / total_batch_size / cfg.batch_size))
             test_accuracy = PSGModelObj.get_accuracy_summary(accuracy / total_batch_size / cfg.batch_size)

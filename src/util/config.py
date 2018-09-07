@@ -26,6 +26,8 @@ flags.DEFINE_float('stddev', 0.8, 'stddev for W initializer')
 flags.DEFINE_integer('negative_sample_size', 5, 'negative sample size')
 flags.DEFINE_integer('epoch_size', 100, 'epoch size')
 
+flags.DEFINE_string('coocur_separator', '#', 'words coocurrence separator')
+
 flags.DEFINE_string('summaries_dir', '../tb/PSG', 'Summaries directory')
 flags.DEFINE_string('psg_train_summary_writer_path', '/psg_train', 'psg train summary writer path')
 flags.DEFINE_string('psg_test_summary_writer_path', '/psg_test', 'psg test summary writer path')
