@@ -11,11 +11,6 @@ import tensorflow as tf
 from util.config import cfg
 import numpy as np
 
-word_dictionary_size = 0
-parser_dictionary_size = 0
-partofspeech_dictionary_size = 0
-kb_relation_dictionary_size = 0
-
 target = []
 context = []
 context_prob = []
@@ -23,7 +18,9 @@ pos = []
 parser = []
 dict_desc = []
 kb_entity = []
-def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file, kb_entity_file, word_count_file, word_coocur_file):
+def load_sample(target_file, word_dict_file, context_file, pos_file, pos_dict_file,
+                parser_file, parser_dict_file, dict_desc_file, kb_entity_file,
+                kb_entity_dict_file, word_count_file, word_coocur_file):
     global target, context, context_prob, pos, parser, dict_desc, kb_entity
     word_count_dict = {}
     word_coocur_dict = {}
@@ -39,11 +36,12 @@ def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file
         f.close()
     with open(target_file, 'r') as f:
         for line in f:
-            target.append(line.replace('\r\n'))
+            target.append(line.strip('\r\n'))
         f.close()
+    word_dictionary_size = len(open(word_dict_file).readlines()) + 1
     with open(context_file, 'r') as f:
         for index, line in enumerate(f):
-            context_word_ids = line.replace('\r\n').split(',')
+            context_word_ids = line.strip('\r\n').split(',')
             context.append(context_word_ids)
             sub_context_prob = []
             if target[index] not in word_count_dict:
@@ -73,15 +71,22 @@ def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file
         f.close()
     with open(pos_file, 'r') as f:
         for line in f:
-            pos.append(line.replace('\r\n'))
+            pos.append(line.strip('\r\n'))
         f.close()
+    partofspeech_dictionary_size = len(open(pos_dict_file).readlines()) + 1
     with open(parser_file, 'r') as f:
         for line in f:
-            parser.append(line.replace('\r\n').split(','))
+            parser_list = line.strip('\r\n').replace(' ','').split(',')
+            if len(parser_list) < cfg.context_window_size:
+                supplement_parser_size = cfg.context_window_size - len(parser_list)
+                for i in range(supplement_parser_size):
+                    parser_list.append(0)
+            parser.append(parser_list)
         f.close()
+    parser_dictionary_size = len(open(parser_dict_file).readlines()) + 1
     with open(dict_desc_file, 'r') as f:
         for line in f:
-            elements = line.replace('\r\n').split(',')
+            elements = line.strip('\r\n').split(',')
             desc_len = len(elements)
             dict_desc_list = []
             if desc_len >= cfg.dict_time_step:
@@ -90,7 +95,7 @@ def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file
                         break
                     dict_desc_list.append(item)
             else:
-                dict_desc_list = elements.copy()
+                dict_desc_list = elements[:]
                 remain_len = cfg.dict_time_step - desc_len
                 for i in range(remain_len):
                     dict_desc_list.append(0)
@@ -98,8 +103,16 @@ def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file
         f.close()
     with open(kb_entity_file, 'r') as f:
         for line in f:
-            kb_entity.append(line.replace('\r\n'))
+            kb_entity_list = line.strip('\r\n').split(',')
+            if len(kb_entity_list) > cfg.kb_relation_length:
+                kb_entity_list = kb_entity_list[0:cfg.kb_relation_length]
+            else:
+                supplement_kb_size = cfg.kb_relation_length - len(kb_entity_list)
+                for i in range(supplement_kb_size):
+                    kb_entity_list.append("0")
+            kb_entity.append(kb_entity_list)
         f.close()
+    kb_relation_dictionary_size = len(open(kb_entity_dict_file).readlines()) + 1
 
     target = np.asarray(target)
     context = np.asarray(context)
@@ -109,6 +122,7 @@ def load_sample(target_file, context_file, pos_file, parser_file, dict_desc_file
     dict_desc = np.asarray(dict_desc)
     kb_entity = np.asarray(kb_entity)
 
+    return [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size]
 class PSGModel():
     def __init__(self, sess):
         self.word = tf.placeholder(shape=[cfg.batch_size], dtype=tf.int32)
@@ -135,7 +149,6 @@ class PSGModel():
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
-                print("self.parser_embed_weight shape is %s" % self.parser_embed_weight.get_shape())
                 self.partofspeech_embed_weight = tf.get_variable(
                     'partofspeech_emb',
                     shape=(partofspeech_dictionary_size, cfg.partofspeech_embedding_size),
@@ -171,13 +184,18 @@ class PSGModel():
             for dict_desc_item in dict_desc_split_list:
                 dict_desc_embed_list.append(tf.nn.embedding_lookup(self.word_embed_weight, dict_desc_item))
             dict_desc_embed_init = tf.reshape(tf.squeeze(tf.convert_to_tensor(dict_desc_embed_list)), shape=[cfg.batch_size, cfg.dict_time_step, -1])
+            # [cfg.batch_size, cfg.dict_time_step, cfg.word_embedding_size]
             print("dict_desc_embed_init shape is %s" % dict_desc_embed_init.get_shape())
 
             cell = rnn.BasicLSTMCell(cfg.dict_lstm_hidden_size)
             init_state = cell.zero_state(cfg.batch_size, dtype=tf.float32)
             dict_desc_outputs, dict_desc_final_state = tf.nn.dynamic_rnn(cell=cell, inputs=dict_desc_embed_init,
                                                                  initial_state=init_state, time_major=False)
+            # [cfg.batch_size, cfg.dict_lstm_hidden_size]
             print("dict_desc_final_state.h shape is %s" % dict_desc_final_state.h.get_shape())
+            # dict_desc_outputs shape: [cfg.batch_size, cfg.dict_time_step, cfg.dict_lstm_hidden_size]
+            # dict_desc_final_state[0] shape: [cfg.batch_size, cfg.dict_time_step]
+            # dict_desc_final_state[1] shape: [cfg.batch_size, cfg.dict_time_step]
             print('dict_desc_outputs shape is %s, dict_desc_final_state shape[0] is %s, dict_desc_final_state shape[1] is %s'
                   % (dict_desc_outputs.get_shape(), dict_desc_final_state[0].get_shape(), dict_desc_final_state[1].get_shape()))
 
@@ -408,19 +426,23 @@ class PSGModel():
         return self.sess.run(self.word_embed_weight, feed_dict={})
 
 if __name__ == '__main__':
-    if len(sys.argv) < 10:
-        print("probabilistic_skip_gram_v3 <target> <context> <part-of-speech> <parser> "
-              "<dictionary desc> <kb entity> <word count dict> <word coocur dict> <word emb output>")
+    if len(sys.argv) < 14:
+        print("probabilistic_skip_gram_v3 <target> <word_dict> <context> <part-of-speech> <part-of-speech_dict> <parser> "
+              "<parser_dict> <dictionary desc> <kb entity> <kb_entity_dict> <word count dict> <word coocur dict> <word emb output>")
         sys.exit()
 
-    load_sample(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8])
+    [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size] = load_sample(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6], sys.argv[7], sys.argv[8],
+                sys.argv[9], sys.argv[10], sys.argv[11], sys.argv[12])
+    print("word_dictionary_size is %d, partofspeech_dictionary_size is %d, parser_dictionary_size is %d,"
+          "kb_relation_dictionary_size is %d" % (word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size))
+
     total_sample_size = target.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
     train_set_size_fake = int(total_batch_size * 1)
 
-    print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d' %
-          (total_batch_size, train_set_size, word_dictionary_size))
+    print('total_batch_size is %d, train_set_size is %d' %
+          (total_batch_size, train_set_size))
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
