@@ -11,6 +11,21 @@ from stanfordcorenlp import StanfordCoreNLP
 from nltk.corpus import wordnet as wn
 import requests
 
+class GooleKGAPI(object):
+    def __init__(self):
+        self.api_key = 'AIzaSyAvXCjcZCh7QRMAgcppheJkfUWktGZQg_M'
+
+    def getResult(self,query):
+        service_url = 'https://kgsearch.googleapis.com/v1/entities:search?key=' + \
+                      self.api_key + '&limit=1&indent=True&query=' + query
+        r = requests.get(url=service_url)
+        response = json.loads(r.text)
+        if "itemListElement" not in response or len(response['itemListElement']) == 0 or \
+            "result" not in response['itemListElement'][0] or "@type" not in response['itemListElement'][0]['result']:
+            print(query)
+            return ""
+        return response['itemListElement'][0]['result']['@type']
+
 if __name__ == "__main__":
     if len(sys.argv) < 15:
         print("<extract_samples> <input file> <stanford corenlp library path> <word dict output file> <word id output file> "
@@ -20,10 +35,15 @@ if __name__ == "__main__":
         sys.exit()
 
     nlp = StanfordCoreNLP(sys.argv[2])
+    WikiData_url = "https://www.wikidata.org/w/api.php?action=wbsearchentities&language=en&search="
+    request_header = {'accept':'application/json'}
+    gkg = GooleKGAPI()
+    '''
     DBPedia_url = "https://api.dbpedia-spotlight.org/en/annotate?text="
     DBPedia_header = {'accept':'application/json'}
     DBPedia_start_str = "Schema:"
     DBPedia_end_str = ","
+    '''
     sub_context_window_size = cfg.context_window_size / 2
 
     word_dict_output = open(sys.argv[3], 'w')
@@ -45,8 +65,10 @@ if __name__ == "__main__":
     pos_dict = {}
     parser_dict = {}
     kb_entity_dict = {}
+    kb_entity_content_dict = {}
     wordnet_dict = {}
-    DBPedia_dict = {}
+    # DBPedia_dict = {}
+    WikiData_dict = {}
     with open(sys.argv[1], 'r') as f:
         for line in f:
             line = line.strip('\r\n')
@@ -147,6 +169,25 @@ if __name__ == "__main__":
                     dict_desc_output.write(",".join(wordnet_dict[cur_word]) + "\n")
                 dict_desc_output.flush()
 
+
+                if cur_word not in kb_entity_content_dict:
+                    kb_list = gkg.getResult(cur_word)
+                    if isinstance(kb_list, str):
+                        kb_entity_output.write("0\n")
+                        kb_entity_output.flush()
+                        continue
+                    kb_list_id = []
+                    for entity in kb_list:
+                        if entity not in kb_entity_dict:
+                            kb_entity_dict[entity] = len(kb_entity_dict) + 1
+                        kb_list_id.append(kb_entity_dict[entity])
+                    kb_entity_content_dict[cur_word] = ",".join([str(item) for item in kb_list_id])
+                    kb_entity_output.write(",".join([str(item) for item in kb_list_id]) + "\n")
+                    kb_entity_output.flush()
+                else:
+                    kb_entity_output.write(kb_entity_content_dict[cur_word] + "\n")
+                    kb_entity_output.flush()
+                '''
                 if cur_word not in DBPedia_dict:
                     r = requests.get(DBPedia_url + cur_word, headers=DBPedia_header)
                     if r.status_code != 200:
@@ -155,7 +196,6 @@ if __name__ == "__main__":
                         try:
                             json_obj = json.loads(str(r.text))
                         except Exception,err:
-                            #print(r.text)
                             print("json.loads() failed")
                             kb_entity_output.write("0\n")
                             word_index += 1
@@ -183,6 +223,7 @@ if __name__ == "__main__":
                 else:
                     kb_entity_output.write(DBPedia_dict[cur_word] + "\n")
                 kb_entity_output.flush()
+                '''
                 word_index += 1
             print(line)
         f.close()
