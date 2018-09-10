@@ -9,6 +9,7 @@ sys.path.append("..")
 from util.config import cfg
 from stanfordcorenlp import StanfordCoreNLP
 from nltk.corpus import wordnet as wn
+from pyltp import Parser, Postagger
 import requests
 
 class GooleKGAPI(object):
@@ -27,14 +28,18 @@ class GooleKGAPI(object):
         return response['itemListElement'][0]['result']['@type']
 
 if __name__ == "__main__":
-    if len(sys.argv) < 15:
-        print("<extract_samples> <input file> <stanford corenlp library path> <word dict output file> <word id output file> "
-              "<context output file> <part-of-speech output file> <part-of-speech dict file> <parser output file> "
-              "<parser dict output file> <dict desc output file> <kb entity output file> <kb dict output file> "
-              "<word count dict output file> <bigram cooccurence dict output file>")
+    if len(sys.argv) < 17:
+        print("<extract_samples> <input file> <stanford corenlp library path> <ltp parser model> <ltp pos model> "
+              "<word dict output file> <word id output file> <context output file> <part-of-speech output file> "
+              "<part-of-speech dict file> <parser output file> <parser dict output file> <dict desc output file> "
+              "<kb entity output file> <kb dict output file> <word count dict output file> <bigram cooccurence dict output file>")
         sys.exit()
 
     nlp = StanfordCoreNLP(sys.argv[2])
+    parser = Parser()
+    parser.load(sys.argv[3])
+    postagger = Postagger()
+    postagger.load(sys.argv[4])
     WikiData_url = "https://www.wikidata.org/w/api.php?action=wbsearchentities&language=en&search="
     request_header = {'accept':'application/json'}
     gkg = GooleKGAPI()
@@ -46,18 +51,18 @@ if __name__ == "__main__":
     '''
     sub_context_window_size = cfg.context_window_size / 2
 
-    word_dict_output = open(sys.argv[3], 'w')
-    word_output = open(sys.argv[4], 'w')
-    context_output = open(sys.argv[5], 'w')
-    partofspeech_output = open(sys.argv[6], 'w')
-    partofspeech_dict_output = open(sys.argv[7], 'w')
-    parser_output = open(sys.argv[8], 'w')
-    parser_dict_output = open(sys.argv[9], 'w')
-    dict_desc_output = open(sys.argv[10], 'w')
-    kb_entity_output = open(sys.argv[11], 'w')
-    kb_dict_output = open(sys.argv[12], 'w')
-    word_count_output = open(sys.argv[13], 'w')
-    word_coocur_output = open(sys.argv[14], 'w')
+    word_dict_output = open(sys.argv[5], 'w')
+    word_output = open(sys.argv[6], 'w')
+    context_output = open(sys.argv[7], 'w')
+    partofspeech_output = open(sys.argv[8], 'w')
+    partofspeech_dict_output = open(sys.argv[9], 'w')
+    parser_output = open(sys.argv[10], 'w')
+    parser_dict_output = open(sys.argv[11], 'w')
+    dict_desc_output = open(sys.argv[12], 'w')
+    kb_entity_output = open(sys.argv[13], 'w')
+    kb_dict_output = open(sys.argv[14], 'w')
+    word_count_output = open(sys.argv[15], 'w')
+    word_coocur_output = open(sys.argv[16], 'w')
 
     word_dict = {}
     word_count_dict = {}
@@ -67,7 +72,6 @@ if __name__ == "__main__":
     kb_entity_dict = {}
     kb_entity_content_dict = {}
     wordnet_dict = {}
-    # DBPedia_dict = {}
     WikiData_dict = {}
     with open(sys.argv[1], 'r') as f:
         for line in f:
@@ -78,8 +82,8 @@ if __name__ == "__main__":
                 continue
             # tuple: [word, pos_tag]
             pos_list = nlp.pos_tag(line)
-            # tuple: [relation, pointer, pointed] except ROOT relationship
-            dependency_parse_list = nlp.dependency_parse(line)
+            postags = postagger.postag(tokenize_list)  # 词性标注
+            dependency_parse_list = parser.parse(tokenize_list, postags)  # 句法分析
 
             word_index = sub_context_window_size
             while word_index < tokenize_list_len - sub_context_window_size:
@@ -128,26 +132,23 @@ if __name__ == "__main__":
                 partofspeech_output.flush()
 
                 parser_list = []
-                for i in range(cfg.context_window_size + 1):
-                    parser_index = word_index - sub_context_window_size + i    # context word index
-                    if parser_index == word_index:
+                for i in range(sub_context_window_size + 1):
+                    if i == 0:
                         continue
-                    for item in dependency_parse_list:
-                        if str(item[0]) not in parser_dict:
-                            parser_dict[str(item[0])] = len(parser_dict) + 1
-                        if str(item[0]) != "ROOT":
-                            if item[2] != parser_index + 1:
-                                continue
-                            if item[1] == word_index + 1:
-                                parser_list.append(str(parser_dict[str(item[0])]))
-                            else:
-                                parser_list.append("0")
-                            break
-                        else:
-                            if item[2] != parser_index + 1:
-                                continue
-                            parser_list.append("0")
-                            break
+                    if dependency_parse_list[word_index - i].head == word_index:
+                        if dependency_parse_list[word_index - i].relation not in parser_dict:
+                            parser_dict[dependency_parse_list[word_index - i].relation] = len(parser_dict) + 1
+                        parser_list.append(str(parser_dict[dependency_parse_list[word_index - i].relation]))
+                    else:
+                        parser_list.append("0")
+                    if dependency_parse_list[word_index + i].head == word_index:
+                        if dependency_parse_list[word_index + i].relation not in parser_dict:
+                            parser_dict[dependency_parse_list[word_index + i].relation] = len(parser_dict) + 1
+                        parser_list.append(str(parser_dict[dependency_parse_list[word_index + i].relation]))
+                    else:
+                        parser_list.append("0")
+                if len(parser_list) < cfg.context_window_size:
+                    print(line)
                 parser_output.write(",".join(parser_list) + "\n")
                 parser_output.flush()
 
@@ -187,45 +188,7 @@ if __name__ == "__main__":
                 else:
                     kb_entity_output.write(kb_entity_content_dict[cur_word] + "\n")
                     kb_entity_output.flush()
-                '''
-                if cur_word not in DBPedia_dict:
-                    r = requests.get(DBPedia_url + cur_word, headers=DBPedia_header)
-                    if r.status_code != 200:
-                        kb_entity_output.write("0\n")
-                    else:
-                        try:
-                            json_obj = json.loads(str(r.text))
-                        except Exception,err:
-                            print("json.loads() failed")
-                            kb_entity_output.write("0\n")
-                            word_index += 1
-                            continue
-                        if "Resources" not in json_obj:
-                            kb_entity_output.write("0\n")
-                            DBPedia_dict[cur_word] = "0"
-                        else:
-                            DB_str = str(json_obj["Resources"][0]["@types"])
-                            start_offset = DB_str.find(DBPedia_start_str)
-                            if start_offset == -1:
-                                kb_entity_output.write("0\n")
-                                DBPedia_dict[cur_word] = "0"
-                            else:
-                                end_offset = DB_str.find(DBPedia_end_str, start_offset + len(DBPedia_start_str))
-                                if end_offset == -1:
-                                    kb_entity_output.write("0\n")
-                                    DBPedia_dict[cur_word] = "0"
-                                else:
-                                    entity = DB_str[start_offset + len(DBPedia_start_str):end_offset]
-                                    if entity not in kb_entity_dict:
-                                        kb_entity_dict[entity] = len(kb_entity_dict) + 1
-                                    kb_entity_output.write(str(kb_entity_dict[entity]) + "\n")
-                                    DBPedia_dict[cur_word] = str(kb_entity_dict[entity])
-                else:
-                    kb_entity_output.write(DBPedia_dict[cur_word] + "\n")
-                kb_entity_output.flush()
-                '''
                 word_index += 1
-            print(line)
         f.close()
 
     word_output.close()
