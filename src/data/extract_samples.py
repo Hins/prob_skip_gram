@@ -91,7 +91,6 @@ if __name__ == "__main__":
                 if cur_word not in word_dict:
                     word_dict[cur_word] = len(word_dict) + 1
                 word_output.write(str(word_dict[cur_word]) + "\n")
-                word_output.flush()
                 if word_dict[cur_word] not in word_count_dict:
                     word_count_dict[word_dict[cur_word]] = 0
                 word_count_dict[word_dict[cur_word]] += 1
@@ -124,12 +123,10 @@ if __name__ == "__main__":
                         continue
                     context_list.append(str(word_dict[tokenize_list[word_index - sub_context_window_size + i]]))
                 context_output.write(",".join(context_list) + "\n")
-                context_output.flush()
                 cur_pos = str(pos_list[word_index][1])
                 if cur_pos not in pos_dict:
                     pos_dict[cur_pos] = len(pos_dict) + 1
                 partofspeech_output.write(str(pos_dict[cur_pos]) + "\n")
-                partofspeech_output.flush()
 
                 parser_list = []
                 for i in range(sub_context_window_size + 1):
@@ -150,7 +147,6 @@ if __name__ == "__main__":
                 if len(parser_list) < cfg.context_window_size:
                     print(line)
                 parser_output.write(",".join(parser_list) + "\n")
-                parser_output.flush()
 
                 if cur_word not in wordnet_dict:
                     wordnet_result = wn.synsets(cur_word)
@@ -168,14 +164,13 @@ if __name__ == "__main__":
                         wordnet_dict[cur_word] = dict_desc_word_id_list
                 else:
                     dict_desc_output.write(",".join(wordnet_dict[cur_word]) + "\n")
-                dict_desc_output.flush()
 
-
+                '''
                 if cur_word not in kb_entity_content_dict:
                     kb_list = gkg.getResult(cur_word)
                     if isinstance(kb_list, str):
                         kb_entity_output.write("0\n")
-                        kb_entity_output.flush()
+                        kb_entity_content_dict[cur_word] = "0"
                         continue
                     kb_list_id = []
                     for entity in kb_list:
@@ -184,10 +179,9 @@ if __name__ == "__main__":
                         kb_list_id.append(kb_entity_dict[entity])
                     kb_entity_content_dict[cur_word] = ",".join([str(item) for item in kb_list_id])
                     kb_entity_output.write(",".join([str(item) for item in kb_list_id]) + "\n")
-                    kb_entity_output.flush()
                 else:
                     kb_entity_output.write(kb_entity_content_dict[cur_word] + "\n")
-                    kb_entity_output.flush()
+                '''
                 word_index += 1
         f.close()
 
