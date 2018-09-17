@@ -21,6 +21,7 @@ flags.DEFINE_integer('hidden_size', 128, 'word2vec weight size')
 
 flags.DEFINE_float('train_set_ratio', 0.8, 'train set ratio')
 flags.DEFINE_integer('batch_size', 256, 'train batch size')
+flags.DEFINE_integer('accumulative_metric_count', 5, 'accumulative metric count')
 
 flags.DEFINE_float('stddev', 0.8, 'stddev for W initializer')
 flags.DEFINE_integer('negative_sample_size', 5, 'negative sample size')

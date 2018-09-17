@@ -452,6 +452,8 @@ if __name__ == '__main__':
         test_writer = tf.summary.FileWriter(cfg.summaries_dir + cfg.psg_test_summary_writer_path, sess.graph)
 
         trainable = False
+        total_loss = 0.0
+        total_accuracy = 0.0
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
             for i in range(total_batch_size):
@@ -466,9 +468,12 @@ if __name__ == '__main__':
                                                  context[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  context_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
                 loss_sum += iter_loss
-            print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size / total_batch_size))
-            train_loss = PSGModelObj.get_loss_summary(np.sum(loss_sum) / cfg.batch_size / total_batch_size)
-            train_writer.add_summary(train_loss, epoch_index + 1)
+            total_loss += loss_sum
+            if (epoch_index + 1) % cfg.accumulative_metric_count == 0:
+                print("epoch_index %d, loss is %f" % (epoch_index / cfg.accumulative_metric_count, np.sum(total_loss) / cfg.batch_size / total_batch_size / cfg.accumulative_metric_count))
+                train_loss = PSGModelObj.get_loss_summary(np.sum(total_loss) / cfg.batch_size / total_batch_size / cfg.accumulative_metric_count)
+                train_writer.add_summary(train_loss, epoch_index + 1)
+                total_loss = 0.0
 
             accuracy = 0.0
             for j in range(total_batch_size):
@@ -480,9 +485,12 @@ if __name__ == '__main__':
                                                      context[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                      context_prob[i*cfg.batch_size:(i+1)*cfg.batch_size])
                 accuracy += iter_accuracy
-            print("iter %d : accuracy %f" % (epoch_index, accuracy / total_batch_size / cfg.batch_size))
-            test_accuracy = PSGModelObj.get_accuracy_summary(accuracy / total_batch_size / cfg.batch_size)
-            test_writer.add_summary(test_accuracy, epoch_index + 1)
+            total_accuracy += accuracy
+            if (epoch_index + 1) % cfg.accumulative_metric_count == 0:
+                print("iter %d : accuracy %f" % (epoch_index / cfg.accumulative_metric_count, total_accuracy / total_batch_size / cfg.batch_size / cfg.accumulative_metric_count))
+                test_accuracy = PSGModelObj.get_accuracy_summary(total_accuracy / total_batch_size / cfg.batch_size / cfg.accumulative_metric_count)
+                test_writer.add_summary(test_accuracy, epoch_index + 1)
+                total_accuracy = 0.0
 
         embed_weight = PSGModelObj.get_word_emb()
         output_embed_file = open(sys.argv[13], 'w')
