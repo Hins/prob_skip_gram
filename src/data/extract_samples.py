@@ -80,11 +80,17 @@ if __name__ == "__main__":
     punctuation_list = string.punctuation
     integ_regex = re.compile(r'-?[1-9]\d*')
     digit_regex = re.compile(r'-?([1-9]\d*\.\d*|0\.\d*[1-9]\d*|0?\.0+|0)$')
+    number_str_constant = '<num>'
     with open(sys.argv[1], 'r') as f:
         for line in f:
             line = line.strip('\r\n')
-            tokenize_list = [str(item) for item in nlp.word_tokenize(line) if str(item) not in punctuation_list and
-                             digit_regex.match(str(item)) == None and integ_regex.match(str(item)) == None]
+            try:
+                tokenize_list = [str(item) for item in nlp.word_tokenize(line) if str(item) not in punctuation_list]
+            except:
+                continue
+            for i in xrange(len(tokenize_list)):
+                if digit_regex.match(tokenize_list[i]) != None or integ_regex.match(tokenize_list[i]) != None:
+                    tokenize_list[i] = number_str_constant
             tokenize_list_len = len(tokenize_list)
             if tokenize_list_len < 1 + cfg.context_window_size:
                 continue
