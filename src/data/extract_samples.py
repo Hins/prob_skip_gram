@@ -8,9 +8,13 @@ import sys
 sys.path.append("..")
 from util.config import cfg
 from stanfordcorenlp import StanfordCoreNLP
+import nltk
+nltk.download('wordnet')
 from nltk.corpus import wordnet as wn
 from pyltp import Parser, Postagger
+import re
 import requests
+import string
 
 class GooleKGAPI(object):
     def __init__(self):
@@ -73,10 +77,14 @@ if __name__ == "__main__":
     kb_entity_content_dict = {}
     wordnet_dict = {}
     WikiData_dict = {}
+    punctuation_list = string.punctuation
+    integ_regex = re.compile(r'-?[1-9]\d*')
+    digit_regex = re.compile(r'-?([1-9]\d*\.\d*|0\.\d*[1-9]\d*|0?\.0+|0)$')
     with open(sys.argv[1], 'r') as f:
         for line in f:
             line = line.strip('\r\n')
-            tokenize_list = [str(item) for item in nlp.word_tokenize(line)]
+            tokenize_list = [str(item) for item in nlp.word_tokenize(line) if str(item) not in punctuation_list and
+                             digit_regex.match(str(item)) == None and integ_regex.match(str(item)) == None]
             tokenize_list_len = len(tokenize_list)
             if tokenize_list_len < 1 + cfg.context_window_size:
                 continue
@@ -157,6 +165,12 @@ if __name__ == "__main__":
                         dict_desc_word_list = nlp.word_tokenize(wordnet_result[0].definition())
                         dict_desc_word_id_list = []
                         for word in dict_desc_word_list:
+                            if word in punctuation_list:
+                                continue
+                            if digit_regex.match(word) != None:
+                                continue
+                            if integ_regex.match(word) != None:
+                                continue
                             if word not in word_dict:
                                 word_dict[word] = len(word_dict) + 1
                             dict_desc_word_id_list.append(str(word_dict[word]))

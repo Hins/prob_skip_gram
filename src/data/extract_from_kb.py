@@ -31,6 +31,7 @@ if r.status_code == 200:
 '''
 
 
+import urllib
 import json
 import requests
 import sys
@@ -40,13 +41,21 @@ class GooleKGAPI(object):
         self.api_key = 'AIzaSyAvXCjcZCh7QRMAgcppheJkfUWktGZQg_M'
 
     def getResult(self,query):
-        service_url = 'https://kgsearch.googleapis.com/v1/entities:search?key=' + \
-                      self.api_key + '&limit=1&indent=True&query=' + query
-        r = requests.get(url=service_url)
-        response = json.loads(r.text)
+        params = {
+            'query': query,
+            'limit': 1,
+            'indent': True,
+            'key': self.api_key,
+        }
+        service_url = 'https://kgsearch.googleapis.com/v1/entities:search'
+        url = service_url + '?' + urllib.urlencode(params)
+        proxies = {
+            "http": "http://106.46.136.112:808",
+            "https": "http://106.46.136.112:808",
+        }
+        response = json.loads(requests.get(url=url, proxies=proxies).text)
         if "itemListElement" not in response or len(response['itemListElement']) == 0 or \
             "result" not in response['itemListElement'][0] or "@type" not in response['itemListElement'][0]['result']:
-            print(query)
             return ""
         return response['itemListElement'][0]['result']['@type']
 
