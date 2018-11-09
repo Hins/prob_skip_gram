@@ -162,7 +162,6 @@ class PSGModel():
                     dtype='float32'
                 )
 
-
             word_embed_init = tf.nn.embedding_lookup(self.word_embed_weight, self.word)
             # [cfg.batch_size, cfg.word_embedding_size]
             print('word_embed_init shape is %s' % word_embed_init.get_shape())
@@ -206,16 +205,15 @@ class PSGModel():
             kb_relation_embed_init = tf.reduce_sum(tf.squeeze(tf.convert_to_tensor(kb_relation_embed_list)), axis=0)
             print("kb_relation_embed_init shape is %s" % kb_relation_embed_init.get_shape())
 
+            word_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.word_embedding_size], dtype='float32')
+            dictionary_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.dict_lstm_hidden_size], dtype='float32')
+            kb_relation_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.kb_embedding_size], dtype='float32')
+            parser_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.parser_embedding_size], dtype='float32')
+            partofspeech_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.partofspeech_embedding_size], dtype='float32')
             with tf.variable_scope("psg_attention_weight"):
                 self.word_attention_weight = tf.get_variable(
                     'word_attention_weight',
                     shape=(cfg.word_embedding_size, cfg.word_embedding_size),
-                    initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
-                    dtype='float32'
-                )
-                self.word_merge_weight = tf.get_variable(
-                    'word_merge_weight',
-                    shape=(cfg.target_lstm_hidden_size, cfg.word_embedding_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
@@ -225,21 +223,9 @@ class PSGModel():
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
-                self.dictionary_merge_weight = tf.get_variable(
-                    'dictionary_merge_weight',
-                    shape=(cfg.target_lstm_hidden_size, cfg.dict_lstm_hidden_size),
-                    initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
-                    dtype='float32'
-                )
                 self.kb_relation_attention_weight = tf.get_variable(
                     'kb_relation_attention_weight',
                     shape=(cfg.word_embedding_size, cfg.kb_embedding_size),
-                    initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
-                    dtype='float32'
-                )
-                self.kb_relation_merge_weight = tf.get_variable(
-                    'kb_relation_merge_weight',
-                    shape=(cfg.target_lstm_hidden_size, cfg.kb_embedding_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
@@ -249,21 +235,9 @@ class PSGModel():
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
-                self.parser_merge_weight = tf.get_variable(
-                    'parser_merge_weight',
-                    shape=(cfg.target_lstm_hidden_size, cfg.parser_embedding_size),
-                    initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
-                    dtype='float32'
-                )
                 self.partofspeech_attention_weight = tf.get_variable(
                     'partofspeech_attention_weight',
                     shape=(cfg.word_embedding_size, cfg.partofspeech_embedding_size),
-                    initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
-                    dtype='float32'
-                )
-                self.partofspeech_merge_weight = tf.get_variable(
-                    'partofspeech_merge_weight',
-                    shape=(cfg.target_lstm_hidden_size, cfg.partofspeech_embedding_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
@@ -340,11 +314,11 @@ class PSGModel():
                 print("alpha_attention shape is %s" % alpha_attention.get_shape())
                 alpha_attention_tile = tf.tile(alpha_attention, [1, cfg.target_lstm_hidden_size])
                 print("alpha_attention_tile shape is %s" % alpha_attention_tile.get_shape())
-                attention_concat = tf.reshape(tf.concat([tf.matmul(self.word_merge_weight, tf.reshape(word_embed_init, shape=[cfg.word_embedding_size, -1])),
-                        tf.matmul(self.dictionary_merge_weight, tf.reshape(dict_desc_final_state.h, shape=[cfg.dict_lstm_hidden_size,-1])),
-                        tf.matmul(self.kb_relation_merge_weight, tf.reshape(kb_relation_embed_init, shape=[cfg.kb_embedding_size, -1])),
-                        tf.matmul(self.parser_merge_weight, tf.reshape(parser_embed_init, shape=[cfg.parser_embedding_size, -1])),
-                        tf.matmul(self.partofspeech_merge_weight, tf.reshape(partofspeech_embed_init, shape=[cfg.partofspeech_embedding_size, -1]))], axis=0),
+                attention_concat = tf.reshape(tf.concat([tf.matmul(word_merge_weight, tf.reshape(word_embed_init, shape=[cfg.word_embedding_size, -1])),
+                        tf.matmul(dictionary_merge_weight, tf.reshape(dict_desc_final_state.h, shape=[cfg.dict_lstm_hidden_size,-1])),
+                        tf.matmul(kb_relation_merge_weight, tf.reshape(kb_relation_embed_init, shape=[cfg.kb_embedding_size, -1])),
+                        tf.matmul(parser_merge_weight, tf.reshape(parser_embed_init, shape=[cfg.parser_embedding_size, -1])),
+                        tf.matmul(partofspeech_merge_weight, tf.reshape(partofspeech_embed_init, shape=[cfg.partofspeech_embedding_size, -1]))], axis=0),
                     shape = [cfg.batch_size, -1])
                 print("attention_concat shape is %s" % attention_concat.get_shape())
                 c_attention = tf.multiply(alpha_attention_tile, attention_concat)

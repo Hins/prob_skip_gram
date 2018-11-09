@@ -12,12 +12,11 @@ import tensorflow as tf
 from util.config import cfg
 import numpy as np
 
-word1_list = []
-word2_list = []
-related_dict = {}
+target_list = []
+context_list = []
 word_dictionary_size = 0
 def load_sample(input_file, dict_file, related_file):
-    global word1_list, word2_list, word_dictionary_size
+    global target_list, context_list, word_dictionary_size
     word_dict = {}
     with open(dict_file, 'r') as f:
         for line in f:
@@ -28,23 +27,16 @@ def load_sample(input_file, dict_file, related_file):
 
     with open(input_file, 'r') as f:
         for line in f:
-            elements = line.strip('\r\n').split('\t')
-            if elements[2] != "0":    # just user positive samples
-                word1_list.append(int(elements[0]))
-                word2_list.append(int(elements[1]))
+            target_list.append(line.strip('\r\n'))
         f.close()
 
     with open(related_file, 'r') as f:
         for line in f:
-            elements = line.strip('\r\n').split(':')
-            key = int(elements[0])
-            related_dict[key] = {}
-            value_list = [int(item) for item in elements[1].split(',') if item is not ""]
-            for item in value_list:
-                related_dict[key][item] = 1
+            elements = line.strip('\r\n').split(',')
+            context_list.extend(elements)
         f.close()
-    word1_list = np.asarray(word1_list)
-    word2_list = np.asarray(word2_list)
+    target_list = np.asarray(target_list)
+    context_list = np.asarray(context_list)
 
 class SkipGramModel():
     def __init__(self, sess, output_file):
@@ -154,30 +146,30 @@ if __name__ == '__main__':
         sys.exit()
 
     load_sample(sys.argv[1], sys.argv[2], sys.argv[3])
-    total_sample_size = word1_list.shape[0]
+    total_sample_size = context_list.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
     train_set_size_fake = int(total_batch_size * 1)
 
-    targets = np.zeros(shape=[word2_list.shape[0]])
-    labels = np.zeros(shape=[word2_list.shape[0], cfg.negative_sample_size + 1])
-    outer_accu = 0
-    for index, word in enumerate(word2_list):
+    targets = []
+    for i in target_list:
+        for j in range(cfg.context_window_size):
+            targets.append(i)
+    targets = np.asarray(targets)
+
+    labels = np.zeros(shape=[total_sample_size, cfg.negative_sample_size + 1])
+    for index, word in enumerate(context_list[train_set_size + 1:]):
         sub_labels = np.zeros(shape=[cfg.negative_sample_size + 1])
         iter = 0
-        sub_labels[iter] = word2_list[index]
+        sub_labels[iter] = word
         iter += 1
         while iter <= cfg.negative_sample_size:
             r = random.randint(1, word_dictionary_size)
-            if r not in related_dict[word]:
+            if r != word:
                 sub_labels[iter] = r
                 iter += 1
         np.random.shuffle(sub_labels)  # shuffle positive and negative samples
         labels[index] = sub_labels
-        for sub_index, elem in enumerate(sub_labels):
-            if elem == word2_list[index]:
-                targets[index] = sub_index
-                break
 
     print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d' %
           (total_batch_size, train_set_size, word_dictionary_size))
@@ -196,8 +188,8 @@ if __name__ == '__main__':
                 if trainable is True:
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
-                _, iter_loss = SkipGramObj.train(word1_list[i * cfg.batch_size:(i+1) * cfg.batch_size],
-                                                 word2_list[i * cfg.batch_size:(i+1) * cfg.batch_size])
+                _, iter_loss = SkipGramObj.train(targets[i * cfg.batch_size:(i+1) * cfg.batch_size],
+                                                 context_list[i * cfg.batch_size:(i+1) * cfg.batch_size])
                 loss_sum += iter_loss
             print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size))
             train_loss = SkipGramObj.get_loss_summary(np.sum(loss_sum) / cfg.batch_size)
@@ -206,9 +198,9 @@ if __name__ == '__main__':
             accuracy = 0.0
             for j in range(total_batch_size - train_set_size):
                 j += train_set_size
-                iter_accuracy = SkipGramObj.validate(word1_list[j*cfg.batch_size : (j+1)*cfg.batch_size],
+                iter_accuracy = SkipGramObj.validate(targets[j*cfg.batch_size : (j+1)*cfg.batch_size],
                                                      labels[j*cfg.batch_size : (j+1)*cfg.batch_size],
-                                                     targets[j*cfg.batch_size : (j+1)*cfg.batch_size])
+                                                     context_list[(j-train_set_size)*cfg.batch_size : (j+1-train_set_size)*cfg.batch_size])
                 accuracy += iter_accuracy
             print("iter %d : accuracy %f" % (epoch_index, accuracy / (total_batch_size - train_set_size)))
             test_accuracy = SkipGramObj.get_accuracy_summary(accuracy / (total_batch_size - train_set_size))
