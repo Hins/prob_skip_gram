@@ -349,6 +349,7 @@ class PSGModel():
             self.opt = tf.train.AdamOptimizer().minimize(self.loss)
             self.model = tf.train.Saver()
             '''
+            # expand self.target_id into one hot space
             with tf.variable_scope("target_one_hot"):
                 target_split_list = tf.split(self.target_id, cfg.context_window_size, axis=1)
                 target_embed_init = []
@@ -361,10 +362,12 @@ class PSGModel():
                 # [cfg.batch_size, context_window_size, word_embedding_size]
                 target_embed_init = tf.reshape(tf.squeeze(tf.convert_to_tensor(target_embed_init)), shape=[cfg.batch_size, cfg.context_window_size, -1])
                 print("target_embed_init shape is %s" % target_embed_init.get_shape())
-                self.one_hot_list = tf.squeeze(tf.split(tf.reshape(tf.convert_to_tensor(self.one_hot_list), shape=[cfg.batch_size, cfg.context_window_size, -1]),
+                one_hot_list = tf.squeeze(tf.split(tf.reshape(tf.convert_to_tensor(one_hot_list), shape=[cfg.batch_size, cfg.context_window_size, -1]),
                                               num_or_size_splits=cfg.batch_size))
-                print("one_hot_list shape is %s" % self.one_hot_list.get_shape())
+                # [cfg.batch_size, cfg.context_window_size, word_dictionary_size]
+                print("one_hot_list shape is %s" % one_hot_list.get_shape())
 
+            # target lstm calculation
             with tf.variable_scope("target"):
                 target_cell = rnn.BasicLSTMCell(cfg.target_lstm_hidden_size)
                 target_init_state = target_cell.zero_state(cfg.batch_size, dtype=tf.float32)
@@ -383,9 +386,9 @@ class PSGModel():
                 target_lstm = tf.squeeze(target_lstm)
                 print("target_lstm shape is %s" % target_lstm.get_shape())
                 # [cfg.batch_size]
-                self.e_word = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
+                e_word = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
                             tf.reshape(target_lstm, shape=[cfg.target_lstm_hidden_size, -1])), word_attention))))
-                print("e_word shape is %s" % self.e_word.get_shape())
+                print("e_word shape is %s" % e_word.get_shape())
                 e_dictionary = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
                             tf.reshape(target_lstm, shape=[cfg.target_lstm_hidden_size, -1])), dictionary_attention))))
                 print("e_dictionary shape is %s" % e_dictionary.get_shape())
@@ -398,7 +401,7 @@ class PSGModel():
                 e_partofspeech = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
                             tf.reshape(target_final_state.h,shape=[cfg.target_lstm_hidden_size,-1])), partofspeech_attention))))
                 print("e_partofspeech shape is %s" % e_partofspeech.get_shape())
-                alpha_attention = tf.nn.softmax(tf.concat([tf.reshape(self.e_word, shape=[cfg.batch_size, -1]),
+                alpha_attention = tf.nn.softmax(tf.concat([tf.reshape(e_word, shape=[cfg.batch_size, -1]),
                                              tf.reshape(e_dictionary, shape=[cfg.batch_size, -1]),
                                              tf.reshape(e_kb_relation, shape=[cfg.batch_size, -1]),
                                              tf.reshape(e_parser, shape=[cfg.batch_size, -1]),
@@ -425,24 +428,34 @@ class PSGModel():
                 print("cur_node shape is %s" % cur_node.get_shape())
                 final_softmax_list.append(cur_node)
             final_softmax_list = tf.split(value=tf.transpose(tf.convert_to_tensor(final_softmax_list)), num_or_size_splits=cfg.batch_size)
+            # final_list shape is [cfg.batch_size, cfg.context_window_size, cfg.context_window_size]
+            # per dimension in final_list[i][j] is attention distribution related with output
             final_list = []
             for softmax_sample in final_softmax_list:
                 final_list.append(tf.reshape(tf.tile(tf.squeeze(softmax_sample), multiples=[cfg.context_window_size]), shape=[cfg.context_window_size, -1]))
-            final_list = tf.split(tf.reshape(tf.convert_to_tensor(final_list), shape=[cfg.batch_size, cfg.context_window_size, -1]),
-                                  num_or_size_splits=cfg.batch_size)
+            # final_list = tf.split(tf.convert_to_tensor(final_list), num_or_size_splits=cfg.batch_size)
+            one_hot_list = tf.split(one_hot_list, num_or_size_splits=cfg.batch_size)
+            # one_hot_list is right
             proj_layer_list = []
             for idx in xrange(len(final_list)):
-                proj_layer_list.append(tf.matmul(tf.squeeze(final_list[idx]), self.one_hot_list[idx]))
-            self.final_softmax_tensor = tf.reduce_sum(tf.convert_to_tensor(proj_layer_list), axis=1)
-            print("proj_layer_list shape is %s" % self.final_softmax_tensor.get_shape())
+                '''
+                proj_layer_list.append(tf.split(tf.matmul(
+                    tf.squeeze(final_list[idx]), tf.squeeze(one_hot_list[idx])), num_or_size_splits=cfg.context_window_size)[0])
+                '''
+                proj_layer_list.append(tf.matmul(
+                    tf.squeeze(final_list[idx]), tf.squeeze(one_hot_list[idx])))
+            print("proj_layer_list shape is %s" % tf.squeeze(tf.convert_to_tensor(proj_layer_list)).get_shape())
+            final_softmax_tensor = tf.reduce_mean(tf.convert_to_tensor(proj_layer_list), axis=1)
+            print("final_softmax_tensor shape is %s" % final_softmax_tensor.get_shape())
 
             # NOT use softmax_w/softmax_b as additional parameters
             #final_softmax_tensor = tf.nn.bias_add(tf.matmul(tf.reshape(tf.convert_to_tensor(final_softmax_list), shape=[cfg.batch_size, -1]),
             #                                 self.softmax_w), self.softmax_b)
             #print("final_softmax_tensor shape is %s" % final_softmax_tensor.get_shape())
 
-            final_softmax_tensor = tf.nn.softmax(self.final_softmax_tensor, axis=1)
+            final_softmax_tensor = tf.nn.softmax(final_softmax_tensor, axis=1)
             print("final_softmax shape is %s" % final_softmax_tensor.get_shape())
+            # self.tmp = final_softmax_tensor
             self.cross_entropy_loss = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target_prob, logits=final_softmax_tensor))
             print("cross_entropy_loss shape is %s" % self.cross_entropy_loss.get_shape())
             self.opt = tf.train.AdamOptimizer().minimize(self.cross_entropy_loss)
@@ -475,7 +488,7 @@ class PSGModel():
                 self.loss_summary = tf.summary.scalar('average_loss', self.average_loss)
 
     def train(self, word, dictionary, kb_relation, parser, partofspeech, target_id, target_prob):
-        return self.sess.run([self.opt, self.cross_entropy_loss, self.final_softmax_tensor], feed_dict={
+        return self.sess.run([self.opt, self.cross_entropy_loss], feed_dict={
             self.word: word,
             self.dictionary: dictionary,
             self.kb_relation: kb_relation,
@@ -551,16 +564,26 @@ if __name__ == '__main__':
                 context_prob_tmp = np.zeros(shape=[context_prob_1st_dim, word_dictionary_size])
                 for idx, val in enumerate(target[i*cfg.batch_size:(i+1)*cfg.batch_size]):
                     context_prob_tmp[idx:val.astype(np.int)] = 1
-                _, iter_loss, word_embed_weight = PSGModelObj.train(target[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                _, iter_loss = PSGModelObj.train(target[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  pos[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  context[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  context_prob_tmp)
-                final_score_list = []
-                for j in np.nonzero(word_embed_weight[0]):
-                    final_score_list.append(word_embed_weight[0][j])
+                '''
+                print(tmp.shape)
+                print(len(np.nonzero(tmp[0][0])))
+                idx = np.nonzero(tmp[0])
+                print(idx)
+                score_list = []
+                for id in idx:
+                    score_list.append(tmp[0][id])
+                print(score_list)
+                # print(len(np.nonzero(word_embed_weight[0])))
+                #print(np.nonzero(word_embed_weight[0][0])[0])
+                print("step %d" % i)
+                '''
                 loss_sum += iter_loss
             print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size / total_batch_size))
             train_loss = PSGModelObj.get_loss_summary(np.sum(loss_sum) / cfg.batch_size / total_batch_size)
