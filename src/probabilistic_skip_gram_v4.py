@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-# @Time        : 2018/9/3 18:24
+# @Time        : 2018/11/12 16:43
 # @Author      : panxiaotong
-# @Description : probabilistic skip-gram
+# @Description : just use target's last status calculated by lstm during attention alignment
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import sys
 from tensorflow.contrib import rnn
 import tensorflow as tf
@@ -138,7 +138,7 @@ class PSGModel():
         2. aggregate all parser information of one word by vector addition, s_{parser}
         3. calculate dictionary information by lstm, use last state as dictionary state, s_{dict}
         4. aggretate all knowledge-base entities of one word by vector addition, s_{kb}
-        5. define 5 U variables in attention, U_{word_id}^{att},\ U_{pos}^{att},\ U_{parser}^{att},\ U_{dict}^{att},\ U_{kb}^{att}
+        5. define 4 U variables in attention, U_{word_id}^{att},\ U_{pos}^{att},\ U_{parser}^{att},\ U_{dict}^{att},\ U_{kb}^{att}
         6. extract embedding info out of target layer, leverage lstm to calculate out hidden state notated as h_{0},\ h_{1},\ h_{2},\ h_{3}
         7. e_{i\^word\_id} = v^{T} \times tanh(W_{att} \times h_{i} + U_{word_id}^{att} \times s_{word_id})
         8. e_{i\^pos} = v^{T} \times tanh(W_{att} \times h_{i} + U_{pos}^{att} \times s_{pos})
@@ -152,18 +152,16 @@ class PSGModel():
         16. p(i|input) = softmax(h) to get prediction result
         17. leverage cross entropy function to calculate loss
         """
-        self.word = tf.placeholder(shape=[cfg.batch_size], dtype=tf.int32)
         self.dictionary = tf.placeholder(shape=[cfg.batch_size, cfg.dict_time_step], dtype=tf.int32)
         self.kb_relation = tf.placeholder(shape=[cfg.batch_size, cfg.kb_relation_length], dtype=tf.int32)
         self.parser = tf.placeholder(shape=[cfg.batch_size, cfg.context_window_size], dtype=tf.int32)
         self.partofspeech = tf.placeholder(shape=[cfg.batch_size], dtype=tf.int32)
         self.target_id = tf.placeholder(shape=[cfg.batch_size, cfg.context_window_size], dtype=tf.int32)
-        # self.target_prob = tf.placeholder(shape=[cfg.batch_size, cfg.context_window_size], dtype=tf.float32)
         self.target_prob = tf.placeholder(shape=[cfg.batch_size, word_dictionary_size], dtype=tf.float32)
         self.validation_target_prob = tf.placeholder(shape=[cfg.batch_size, cfg.context_window_size], dtype=tf.float32)
         self.sess = sess
 
-        with tf.device('/gpu:0'):
+        with tf.device('/gpu:1'):
             with tf.variable_scope("psg_model"):
                 self.word_embed_weight = tf.get_variable(
                     'word_emb',
@@ -193,10 +191,6 @@ class PSGModel():
 
             # calculate initialized embedding information
             with tf.variable_scope("init_embedding"):
-                word_embed_init = tf.nn.embedding_lookup(self.word_embed_weight, self.word)
-                # [cfg.batch_size, cfg.word_embedding_size]
-                print('word_embed_init shape is %s' % word_embed_init.get_shape())
-
                 # calculate parser embedding by vector addition
                 parser_split_list = tf.split(self.parser, num_or_size_splits=cfg.context_window_size, axis=1)
                 parser_embed_list = []
@@ -235,25 +229,8 @@ class PSGModel():
                 kb_relation_embed_init = tf.reduce_sum(tf.squeeze(tf.convert_to_tensor(kb_relation_embed_list)), axis=0)
                 print("kb_relation_embed_init shape is %s" % kb_relation_embed_init.get_shape())
 
-                word_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.word_embedding_size],
-                                            dtype='float32')
-                partofspeech_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.partofspeech_embedding_size],
-                                                    dtype='float32')
-                parser_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.parser_embedding_size],
-                                              dtype='float32')
-                dictionary_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.dict_lstm_hidden_size],
-                                                  dtype='float32')
-                kb_relation_merge_weight = tf.ones(shape=[cfg.target_lstm_hidden_size, cfg.kb_embedding_size],
-                                                   dtype='float32')
-
             # normalize all input vectors into cfg.word_embedding_size dimension
             with tf.variable_scope("psg_attention_weight"):
-                self.word_attention_weight = tf.get_variable(
-                    'word_attention_weight',
-                    shape=(cfg.word_embedding_size, cfg.word_embedding_size),
-                    initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
-                    dtype='float32'
-                )
                 self.dictionary_attention_weight = tf.get_variable(
                     'dictionary_attention_weight',
                     shape=(cfg.word_embedding_size, cfg.dict_lstm_hidden_size),
@@ -306,49 +283,22 @@ class PSGModel():
                 )
 
             with tf.variable_scope("embedding_alignment"):
-                # [word_embedding_size, cfg.batch_size]
-                word_attention = tf.matmul(self.word_attention_weight, tf.transpose(word_embed_init))
-                print("word_attention shape is %s" % word_attention.get_shape())
-                # [word_embedding_size, cfg.batch_size]
                 dictionary_attention = tf.matmul(self.dictionary_attention_weight, tf.reshape(dict_desc_final_state.h,
                                                                                               shape=[cfg.dict_lstm_hidden_size, -1]))
-                print("dictionary_attention shape is %s" % dictionary_attention.get_shape())
                 # [word_embedding_size, cfg.batch_size]
+                print("dictionary_attention shape is %s" % dictionary_attention.get_shape())
                 kb_relation_attention = tf.matmul(self.kb_relation_attention_weight, tf.reshape(kb_relation_embed_init,
                                                                                             shape=[cfg.kb_embedding_size, -1]))
-                print("kb_relation_attention shape is %s" % kb_relation_attention.get_shape())
                 # [word_embedding_size, cfg.batch_size]
+                print("kb_relation_attention shape is %s" % kb_relation_attention.get_shape())
                 parser_attention = tf.matmul(self.parser_attention_weight, tf.reshape(parser_embed_init,
                                                                                             shape=[cfg.parser_embedding_size, -1]))
-                print("parser_attention shape is %s" % parser_attention.get_shape())
                 # [word_embedding_size, cfg.batch_size]
+                print("parser_attention shape is %s" % parser_attention.get_shape())
                 partofspeech_attention = tf.matmul(self.partofspeech_attention_weight, tf.reshape(partofspeech_embed_init,
                                                                                             shape=[cfg.partofspeech_embedding_size, -1]))
+                # [word_embedding_size, cfg.batch_size]
                 print("partofspeech_attention shape is %s" % partofspeech_attention.get_shape())
-
-            # attention vector concatenation is safe
-            '''
-            # temporal solution 1
-            self.nce_w = tf.get_variable(
-                'nce_w',
-                shape=(word_dictionary_size, cfg.word_embedding_size * 5),
-                initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
-                dtype='float32'
-            )
-            self.nce_b = tf.get_variable(
-                'nce_b',
-                shape=(word_dictionary_size),
-                initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
-                dtype='float32'
-            )
-            concat_tensor = tf.concat([word_attention, dictionary_attention, kb_relation_attention, parser_attention, partofspeech_attention], axis=0)
-            self.loss = tf.reduce_mean(
-                tf.nn.nce_loss(weights=self.nce_w, biases=self.nce_b, labels=tf.reshape(self.word, shape=[-1, 1]),
-                               inputs=tf.reshape(concat_tensor, shape=[cfg.batch_size, -1]),
-                               num_sampled=cfg.negative_sample_size, num_classes=word_dictionary_size))
-            self.opt = tf.train.AdamOptimizer().minimize(self.loss)
-            self.model = tf.train.Saver()
-            '''
             # expand self.target_id into one hot space
             with tf.variable_scope("target_one_hot"):
                 target_split_list = tf.split(self.target_id, cfg.context_window_size, axis=1)
@@ -379,84 +329,49 @@ class PSGModel():
                     % (target_outputs.get_shape(), target_final_state[0].get_shape(),
                        target_final_state[1].get_shape()))
 
-            target_lstm_list = tf.split(target_outputs, cfg.context_window_size, axis=1)
-            final_softmax_list = []
-            for target_lstm in target_lstm_list:
-                # target_lstm shape is [cfg.batch_size, cfg.target_lstm_hidden_size]
-                target_lstm = tf.squeeze(target_lstm)
-                print("target_lstm shape is %s" % target_lstm.get_shape())
-                # [cfg.batch_size]
-                e_word = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
-                            tf.reshape(target_lstm, shape=[cfg.target_lstm_hidden_size, -1])), word_attention))))
-                print("e_word shape is %s" % e_word.get_shape())
-                e_dictionary = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
-                            tf.reshape(target_lstm, shape=[cfg.target_lstm_hidden_size, -1])), dictionary_attention))))
-                print("e_dictionary shape is %s" % e_dictionary.get_shape())
-                e_kb_relation = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
-                            tf.reshape(target_final_state.h,shape=[cfg.target_lstm_hidden_size,-1])), kb_relation_attention))))
-                print("e_kb_relation shape is %s" % e_kb_relation.get_shape())
-                e_parser = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
-                            tf.reshape(target_final_state.h,shape=[cfg.target_lstm_hidden_size,-1])), parser_attention))))
-                print("e_parser shape is %s" % e_parser.get_shape())
-                e_partofspeech = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
-                            tf.reshape(target_final_state.h,shape=[cfg.target_lstm_hidden_size,-1])), partofspeech_attention))))
-                print("e_partofspeech shape is %s" % e_partofspeech.get_shape())
-                alpha_attention = tf.nn.softmax(tf.concat([tf.reshape(e_word, shape=[cfg.batch_size, -1]),
-                                             tf.reshape(e_dictionary, shape=[cfg.batch_size, -1]),
-                                             tf.reshape(e_kb_relation, shape=[cfg.batch_size, -1]),
-                                             tf.reshape(e_parser, shape=[cfg.batch_size, -1]),
-                                             tf.reshape(e_partofspeech, shape=[cfg.batch_size, -1])], axis=1), axis=1)
-                # [cfg.batch_size, 5]
-                print("alpha_attention shape is %s" % alpha_attention.get_shape())
-                alpha_attention_tile = tf.tile(alpha_attention, [1, cfg.target_lstm_hidden_size])
-                # [cfg.batch_size, 5 * cfg.target_lstm_hidden_size]
-                print("alpha_attention_tile shape is %s" % alpha_attention_tile.get_shape())
-                attention_concat = tf.reshape(tf.concat([tf.matmul(word_merge_weight, tf.reshape(word_embed_init, shape=[cfg.word_embedding_size, -1])),
-                        tf.matmul(dictionary_merge_weight, tf.reshape(dict_desc_final_state.h, shape=[cfg.dict_lstm_hidden_size,-1])),
-                        tf.matmul(kb_relation_merge_weight, tf.reshape(kb_relation_embed_init, shape=[cfg.kb_embedding_size, -1])),
-                        tf.matmul(parser_merge_weight, tf.reshape(parser_embed_init, shape=[cfg.parser_embedding_size, -1])),
-                        tf.matmul(partofspeech_merge_weight, tf.reshape(partofspeech_embed_init, shape=[cfg.partofspeech_embedding_size, -1]))], axis=0),
-                    shape = [cfg.batch_size, -1])
-                # [cfg.batch_size, 5 * cfg.target_lstm_hidden_size]
-                print("attention_concat shape is %s" % attention_concat.get_shape())
-                c_attention = tf.reduce_sum(tf.reshape(tf.multiply(alpha_attention_tile, attention_concat),
-                            shape=[cfg.batch_size, cfg.target_lstm_hidden_size, -1]), axis=2)
-                # [cfg.batch_size, cfg.target_lstm_hidden_size]
-                print("c_attention shape is %s" % c_attention.get_shape())
-                cur_node = tf.reduce_sum(tf.square(tf.multiply(target_lstm, c_attention)), 1)
-                # [cfg.batch_size]
-                print("cur_node shape is %s" % cur_node.get_shape())
-                final_softmax_list.append(cur_node)
-            final_softmax_list = tf.split(value=tf.transpose(tf.convert_to_tensor(final_softmax_list)), num_or_size_splits=cfg.batch_size)
-            # final_list shape is [cfg.batch_size, cfg.context_window_size, cfg.context_window_size]
-            # per dimension in final_list[i][j] is attention distribution related with output
-            final_list = []
-            for softmax_sample in final_softmax_list:
-                final_list.append(tf.reshape(tf.tile(tf.squeeze(softmax_sample), multiples=[cfg.context_window_size]), shape=[cfg.context_window_size, -1]))
-            one_hot_list = tf.split(one_hot_list, num_or_size_splits=cfg.batch_size)
-            # one_hot_list is right
-            proj_layer_list = []
-            for idx in xrange(len(final_list)):
-                '''
-                proj_layer_list.append(tf.split(tf.matmul(
-                    tf.squeeze(final_list[idx]), tf.squeeze(one_hot_list[idx])), num_or_size_splits=cfg.context_window_size)[0])
-                '''
-                proj_layer_list.append(tf.matmul(
-                    tf.squeeze(tf.div(final_list[idx], tf.reduce_sum(final_list[idx], axis=1))), tf.squeeze(one_hot_list[idx])))
-            # [cfg.batch_size, cfg.context_window_size, word_dictionary_size]
-            print("proj_layer_list shape is %s" % tf.squeeze(tf.convert_to_tensor(proj_layer_list)).get_shape())
-            final_softmax_tensor = tf.reduce_mean(tf.convert_to_tensor(proj_layer_list), axis=1)
-            # [cfg.batch_size, word_dictionary_size]
-            print("final_softmax_tensor shape is %s" % final_softmax_tensor.get_shape())
-
-            # NOT use softmax_w/softmax_b as additional parameters
-            #final_softmax_tensor = tf.nn.bias_add(tf.matmul(tf.reshape(tf.convert_to_tensor(final_softmax_list), shape=[cfg.batch_size, -1]),
-            #                                 self.softmax_w), self.softmax_b)
-            #print("final_softmax_tensor shape is %s" % final_softmax_tensor.get_shape())
-
-            # final_softmax_tensor = tf.nn.softmax(final_softmax_tensor, axis=1)
-            print("final_softmax shape is %s" % final_softmax_tensor.get_shape())
-            self.cross_entropy_loss = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.target_prob, logits=final_softmax_tensor))
+            e_dictionary = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
+                    tf.reshape(target_final_state.h, shape=[cfg.target_lstm_hidden_size, -1])), dictionary_attention))))
+            print("e_dictionary shape is %s" % e_dictionary.get_shape())
+            e_kb_relation = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
+                    tf.reshape(target_final_state.h, shape=[cfg.target_lstm_hidden_size,-1])), kb_relation_attention))))
+            print("e_kb_relation shape is %s" % e_kb_relation.get_shape())
+            e_parser = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
+                    tf.reshape(target_final_state.h,shape=[cfg.target_lstm_hidden_size,-1])), parser_attention))))
+            print("e_parser shape is %s" % e_parser.get_shape())
+            e_partofspeech = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
+                    tf.reshape(target_final_state.h,shape=[cfg.target_lstm_hidden_size,-1])), partofspeech_attention))))
+            print("e_partofspeech shape is %s" % e_partofspeech.get_shape())
+            alpha_attention = tf.nn.softmax(tf.concat([tf.reshape(e_dictionary, shape=[cfg.batch_size, -1]),
+                                                       tf.reshape(e_kb_relation, shape=[cfg.batch_size, -1]),
+                                                       tf.reshape(e_parser, shape=[cfg.batch_size, -1]),
+                                                       tf.reshape(e_partofspeech, shape=[cfg.batch_size, -1])], axis=1),
+                                            axis=1)
+            alpha_attention_tile = tf.tile(alpha_attention, [1, cfg.word_embedding_size])
+            # [cfg.batch_size, 4 * cfg.word_embedding_size]
+            print("alpha_attention_tile shape is %s" % alpha_attention_tile.get_shape())
+            # [cfg.batch_size, 4]
+            print("alpha_attention shape is %s" % alpha_attention.get_shape())
+            c_attention = tf.reduce_sum(tf.reshape(tf.multiply(tf.concat([tf.reshape(dictionary_attention, shape=[cfg.batch_size, -1]),
+                                     tf.reshape(kb_relation_attention, shape=[cfg.batch_size, -1]),
+                                     tf.reshape(parser_attention, shape=[cfg.batch_size, -1]),
+                                     tf.reshape(partofspeech_attention, shape=[cfg.batch_size, -1])], axis=1),
+                                      alpha_attention_tile), shape=[cfg.batch_size, 4, -1]), axis=1)
+            print("c_attention shape is %s" % c_attention.get_shape())
+            self.proj_w = tf.get_variable(
+                'proj_w',
+                shape=(cfg.word_embedding_size, word_dictionary_size),
+                initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
+                dtype='float32'
+            )
+            self.proj_b = tf.get_variable(
+                'proj_b',
+                shape=(word_dictionary_size),
+                initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
+                dtype='float32'
+            )
+            softmax_layer = tf.nn.bias_add(tf.matmul(c_attention, self.proj_w), self.proj_b)
+            self.cross_entropy_loss = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits_v2(
+                labels=self.target_prob, logits=softmax_layer))
             print("cross_entropy_loss shape is %s" % self.cross_entropy_loss.get_shape())
             self.opt = tf.train.AdamOptimizer().minimize(self.cross_entropy_loss)
             self.model = tf.train.Saver()
@@ -467,7 +382,7 @@ class PSGModel():
             #print("final_softmax_tensor shape is %s" % final_softmax_tensor.get_shape())
 
             # get prediction result from softmax according by target_id information
-            final_softmax_tensor_list = tf.split(final_softmax_tensor, num_or_size_splits=cfg.batch_size)
+            final_softmax_tensor_list = tf.split(softmax_layer, num_or_size_splits=cfg.batch_size)
             target_id_list = tf.split(self.target_id, num_or_size_splits=cfg.batch_size)
             comparison_list = []
             for idx, final_softmax_element in enumerate(final_softmax_tensor_list):
@@ -487,9 +402,8 @@ class PSGModel():
                 self.average_loss = tf.placeholder(tf.float32)
                 self.loss_summary = tf.summary.scalar('average_loss', self.average_loss)
 
-    def train(self, word, dictionary, kb_relation, parser, partofspeech, target_id, target_prob):
+    def train(self, dictionary, kb_relation, parser, partofspeech, target_id, target_prob):
         return self.sess.run([self.opt, self.cross_entropy_loss], feed_dict={
-            self.word: word,
             self.dictionary: dictionary,
             self.kb_relation: kb_relation,
             self.parser: parser,
@@ -497,9 +411,8 @@ class PSGModel():
             self.target_id: target_id,
             self.target_prob: target_prob})
 
-    def validate(self, word, dictionary, kb_relation, parser, partofspeech, target_id, validation_target_prob):
+    def validate(self, dictionary, kb_relation, parser, partofspeech, target_id, validation_target_prob):
         return self.sess.run(self.accuracy, feed_dict={
-            self.word: word,
             self.dictionary: dictionary,
             self.kb_relation: kb_relation,
             self.parser: parser,
@@ -565,7 +478,7 @@ if __name__ == '__main__':
                 for idx, val in enumerate(context_prob[i*cfg.batch_size:(i+1)*cfg.batch_size]):
                     for sub_idx, sub_val in enumerate(val):
                         context_prob_tmp[idx][int(context[i*cfg.batch_size + idx][sub_idx])] = sub_val
-                _, iter_loss = PSGModelObj.train(target[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                _, iter_loss = PSGModelObj.train(
                                                  dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
@@ -598,7 +511,7 @@ if __name__ == '__main__':
                 for idx, val in enumerate(target[i*cfg.batch_size:(i+1)*cfg.batch_size]):
                     context_prob_tmp[idx:val.astype(np.int)] = 1
                 '''
-                iter_accuracy = PSGModelObj.validate(target[i*cfg.batch_size:(i+1)*cfg.batch_size],
+                iter_accuracy = PSGModelObj.validate(
                                                      dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                      kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                      parser[i*cfg.batch_size:(i+1)*cfg.batch_size],

@@ -4,7 +4,7 @@
 # @Description : naive skip-gram for comparison
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import random
 import sys
 sys.path.append("..")
@@ -47,7 +47,7 @@ class SkipGramModel():
         self.sess = sess
         self.output_file = output_file
 
-        with tf.device('/gpu:0'):
+        with tf.device('/gpu:1'):
             with tf.variable_scope("skipgram_model"):
                 self.word_embed_weight = tf.get_variable(
                     'word_emb',
