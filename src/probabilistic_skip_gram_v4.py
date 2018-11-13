@@ -485,17 +485,6 @@ if __name__ == '__main__':
                                                  pos[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  context[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  context_prob_tmp)
-                #print(iter_loss)
-                '''
-                print(len(np.nonzero(tmp)[0]))
-                idx = np.nonzero(tmp)
-                print(idx)
-                score_list = []
-                for id in idx:
-                    score_list.append(tmp[id])
-                print(score_list)
-                '''
-                #print("step %d" % i)
                 loss_sum += iter_loss
             print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size / total_batch_size))
             train_loss = PSGModelObj.get_loss_summary(np.sum(loss_sum) / cfg.batch_size / total_batch_size)
@@ -503,14 +492,6 @@ if __name__ == '__main__':
 
             accuracy = 0.0
             for j in range(total_batch_size):
-                '''
-                context_prob_info = context_prob[i * cfg.batch_size:(i + 1) * cfg.batch_size]
-                context_prob_1st_dim = context_prob_info.shape[0]
-                context_prob_2nd_dim = context_prob_info.shape[1]
-                context_prob_tmp = np.zeros(shape=[context_prob_1st_dim, word_dictionary_size])
-                for idx, val in enumerate(target[i*cfg.batch_size:(i+1)*cfg.batch_size]):
-                    context_prob_tmp[idx:val.astype(np.int)] = 1
-                '''
                 iter_accuracy = PSGModelObj.validate(
                                                      dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                      kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
@@ -524,7 +505,7 @@ if __name__ == '__main__':
             test_writer.add_summary(test_accuracy, epoch_index + 1)
 
         embed_weight = PSGModelObj.get_word_emb()
-        output_embed_file = open(sys.argv[1], 'w')
+        output_embed_file = open(sys.argv[13], 'w')
         for embed_item in embed_weight:
             embed_list = list(embed_item)
             embed_list = [str(item) for item in embed_list]

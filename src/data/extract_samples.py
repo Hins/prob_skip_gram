@@ -32,11 +32,11 @@ class GooleKGAPI(object):
         return response['itemListElement'][0]['result']['@type']
 
 if __name__ == "__main__":
-    if len(sys.argv) < 17:
+    if len(sys.argv) < 15:
         print("<extract_samples> <input file> <stanford corenlp library path> <ltp parser model> <ltp pos model> "
               "<word dict output file> <word id output file> <context output file> <part-of-speech output file> "
               "<part-of-speech dict file> <parser output file> <parser dict output file> <dict desc output file> "
-              "<kb entity output file> <kb dict output file> <word count dict output file> <bigram cooccurence dict output file>")
+              "<word count dict output file> <bigram cooccurence dict output file>")
         sys.exit()
 
     nlp = StanfordCoreNLP(sys.argv[2])
@@ -63,10 +63,10 @@ if __name__ == "__main__":
     parser_output = open(sys.argv[10], 'w')
     parser_dict_output = open(sys.argv[11], 'w')
     dict_desc_output = open(sys.argv[12], 'w')
-    kb_entity_output = open(sys.argv[13], 'w')
-    kb_dict_output = open(sys.argv[14], 'w')
-    word_count_output = open(sys.argv[15], 'w')
-    word_coocur_output = open(sys.argv[16], 'w')
+    #kb_entity_output = open(sys.argv[13], 'w')
+    #kb_dict_output = open(sys.argv[14], 'w')
+    word_count_output = open(sys.argv[13], 'w')
+    word_coocur_output = open(sys.argv[14], 'w')
 
     word_dict = {}
     word_count_dict = {}
@@ -210,7 +210,7 @@ if __name__ == "__main__":
     partofspeech_output.close()
     parser_output.close()
     dict_desc_output.close()
-    kb_entity_output.close()
+    #kb_entity_output.close()
 
     for k,v in word_dict.items():
         word_dict_output.write(k + "\t" + str(v) + "\n")
@@ -218,8 +218,8 @@ if __name__ == "__main__":
         partofspeech_dict_output.write(k + "\t" + str(v) + "\n")
     for k,v in parser_dict.items():
         parser_dict_output.write(k + "\t" + str(v) + "\n")
-    for k,v in kb_entity_dict.items():
-        kb_dict_output.write(k + "\t" + str(v) + "\n")
+    #for k,v in kb_entity_dict.items():
+    #    kb_dict_output.write(k + "\t" + str(v) + "\n")
     for k,v in word_count_dict.items():
         word_count_output.write(str(k) + "\t" + str(v) + "\n")
     for k,v in word_coocur_dict.items():
@@ -229,6 +229,6 @@ if __name__ == "__main__":
     word_dict_output.close()
     partofspeech_dict_output.close()
     parser_dict_output.close()
-    kb_dict_output.close()
+    #kb_dict_output.close()
     word_count_output.close()
     word_coocur_output.close()

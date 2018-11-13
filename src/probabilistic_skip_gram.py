@@ -611,7 +611,7 @@ if __name__ == '__main__':
             test_writer.add_summary(test_accuracy, epoch_index + 1)
 
         embed_weight = PSGModelObj.get_word_emb()
-        output_embed_file = open(sys.argv[1], 'w')
+        output_embed_file = open(sys.argv[13], 'w')
         for embed_item in embed_weight:
             embed_list = list(embed_item)
             embed_list = [str(item) for item in embed_list]
