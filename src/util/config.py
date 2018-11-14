@@ -8,7 +8,6 @@ import tensorflow as tf
 flags = tf.app.flags
 
 flags.DEFINE_integer('word_embedding_size', 256, 'word id embedding size')
-flags.DEFINE_integer('dict_embedding_size', 100, 'dictionary explanation embedding size')
 flags.DEFINE_integer('dict_time_step', 15, 'dictionary sentence time step')
 flags.DEFINE_integer('kb_embedding_size', 200, 'knowledge base relation embedding size')
 flags.DEFINE_integer('kb_relation_length', 5, 'knowledge base relation one-hot length')
@@ -17,7 +16,7 @@ flags.DEFINE_integer('partofspeech_embedding_size', 400, 'part of speech embeddi
 flags.DEFINE_integer('context_window_size', 4, 'context window size')
 flags.DEFINE_integer('dict_lstm_hidden_size', 128, 'dictionary lstm model hidden size')
 flags.DEFINE_integer('target_lstm_hidden_size', 300, 'target lstm model hidden size')
-flags.DEFINE_integer('hidden_size', 128, 'word2vec weight size')
+flags.DEFINE_integer('attention_size', 400, 'attention parameter v size')
 
 flags.DEFINE_float('train_set_ratio', 0.8, 'train set ratio')
 flags.DEFINE_integer('batch_size', 150, 'train batch size')

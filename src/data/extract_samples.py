@@ -15,6 +15,7 @@ from pyltp import Parser, Postagger
 import re
 import requests
 import string
+import random
 
 class GooleKGAPI(object):
     def __init__(self):
@@ -32,11 +33,11 @@ class GooleKGAPI(object):
         return response['itemListElement'][0]['result']['@type']
 
 if __name__ == "__main__":
-    if len(sys.argv) < 15:
+    if len(sys.argv) < 16:
         print("<extract_samples> <input file> <stanford corenlp library path> <ltp parser model> <ltp pos model> "
               "<word dict output file> <word id output file> <context output file> <part-of-speech output file> "
               "<part-of-speech dict file> <parser output file> <parser dict output file> <dict desc output file> "
-              "<word count dict output file> <bigram cooccurence dict output file>")
+              "<word count dict output file> <bigram cooccurence dict output file> <sample ratio>")
         sys.exit()
 
     nlp = StanfordCoreNLP(sys.argv[2])
@@ -67,6 +68,7 @@ if __name__ == "__main__":
     #kb_dict_output = open(sys.argv[14], 'w')
     word_count_output = open(sys.argv[13], 'w')
     word_coocur_output = open(sys.argv[14], 'w')
+    sample_ratio = float(sys.argv[15])
 
     word_dict = {}
     word_count_dict = {}
@@ -83,6 +85,8 @@ if __name__ == "__main__":
     number_str_constant = '<num>'
     with open(sys.argv[1], 'r') as f:
         for line in f:
+            if random.uniform(0,1) < sample_ratio:
+                continue
             line = line.strip('\r\n')
             try:
                 tokenize_list = [str(item) for item in nlp.word_tokenize(line) if str(item) not in punctuation_list]

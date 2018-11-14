@@ -4,7 +4,7 @@
 # @Description : just use target's last status calculated by lstm during attention alignment
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import sys
 from tensorflow.contrib import rnn
 import tensorflow as tf
@@ -161,7 +161,7 @@ class PSGModel():
         self.validation_target_prob = tf.placeholder(shape=[cfg.batch_size, cfg.context_window_size], dtype=tf.float32)
         self.sess = sess
 
-        with tf.device('/gpu:1'):
+        with tf.device('/gpu:0'):
             with tf.variable_scope("psg_model"):
                 self.word_embed_weight = tf.get_variable(
                     'word_emb',
@@ -213,7 +213,7 @@ class PSGModel():
                 dict_desc_embed_init = tf.reshape(tf.squeeze(tf.convert_to_tensor(dict_desc_embed_list)), shape=[cfg.batch_size, cfg.dict_time_step, -1])
                 print("dict_desc_embed_init shape is %s" % dict_desc_embed_init.get_shape())
 
-                cell = rnn.BasicLSTMCell(cfg.dict_lstm_hidden_size)
+                cell = rnn.BasicLSTMCell(cfg.dict_lstm_hidden_size, name="dict_rnn")
                 init_state = cell.zero_state(cfg.batch_size, dtype=tf.float32)
                 dict_desc_outputs, dict_desc_final_state = tf.nn.dynamic_rnn(cell=cell, inputs=dict_desc_embed_init,
                                                                      initial_state=init_state, time_major=False)
@@ -229,41 +229,41 @@ class PSGModel():
                 kb_relation_embed_init = tf.reduce_sum(tf.squeeze(tf.convert_to_tensor(kb_relation_embed_list)), axis=0)
                 print("kb_relation_embed_init shape is %s" % kb_relation_embed_init.get_shape())
 
-            # normalize all input vectors into cfg.word_embedding_size dimension
+            # normalize all input vectors into cfg.attention_size dimension
             with tf.variable_scope("psg_attention_weight"):
                 self.dictionary_attention_weight = tf.get_variable(
                     'dictionary_attention_weight',
-                    shape=(cfg.word_embedding_size, cfg.dict_lstm_hidden_size),
+                    shape=(cfg.attention_size, cfg.dict_lstm_hidden_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.kb_relation_attention_weight = tf.get_variable(
                     'kb_relation_attention_weight',
-                    shape=(cfg.word_embedding_size, cfg.kb_embedding_size),
+                    shape=(cfg.attention_size, cfg.kb_embedding_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.parser_attention_weight = tf.get_variable(
                     'parser_attention_weight',
-                    shape=(cfg.word_embedding_size, cfg.parser_embedding_size),
+                    shape=(cfg.attention_size, cfg.parser_embedding_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.partofspeech_attention_weight = tf.get_variable(
                     'partofspeech_attention_weight',
-                    shape=(cfg.word_embedding_size, cfg.partofspeech_embedding_size),
+                    shape=(cfg.attention_size, cfg.partofspeech_embedding_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.attention_w = tf.get_variable(
                     'attention_w',
-                    shape=(cfg.word_embedding_size, cfg.target_lstm_hidden_size),
+                    shape=(cfg.attention_size, cfg.target_lstm_hidden_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.attention_v = tf.get_variable(
                     'attention_v',
-                    shape=(1, cfg.word_embedding_size),
+                    shape=(1, cfg.attention_size),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
@@ -285,19 +285,19 @@ class PSGModel():
             with tf.variable_scope("embedding_alignment"):
                 dictionary_attention = tf.matmul(self.dictionary_attention_weight, tf.reshape(dict_desc_final_state.h,
                                                                                               shape=[cfg.dict_lstm_hidden_size, -1]))
-                # [word_embedding_size, cfg.batch_size]
+                # [attention_size, cfg.batch_size]
                 print("dictionary_attention shape is %s" % dictionary_attention.get_shape())
                 kb_relation_attention = tf.matmul(self.kb_relation_attention_weight, tf.reshape(kb_relation_embed_init,
                                                                                             shape=[cfg.kb_embedding_size, -1]))
-                # [word_embedding_size, cfg.batch_size]
+                # [attention_size, cfg.batch_size]
                 print("kb_relation_attention shape is %s" % kb_relation_attention.get_shape())
                 parser_attention = tf.matmul(self.parser_attention_weight, tf.reshape(parser_embed_init,
                                                                                             shape=[cfg.parser_embedding_size, -1]))
-                # [word_embedding_size, cfg.batch_size]
+                # [attention_size, cfg.batch_size]
                 print("parser_attention shape is %s" % parser_attention.get_shape())
                 partofspeech_attention = tf.matmul(self.partofspeech_attention_weight, tf.reshape(partofspeech_embed_init,
                                                                                             shape=[cfg.partofspeech_embedding_size, -1]))
-                # [word_embedding_size, cfg.batch_size]
+                # [attention_size, cfg.batch_size]
                 print("partofspeech_attention shape is %s" % partofspeech_attention.get_shape())
             # expand self.target_id into one hot space
             with tf.variable_scope("target_one_hot"):
@@ -346,8 +346,8 @@ class PSGModel():
                                                        tf.reshape(e_parser, shape=[cfg.batch_size, -1]),
                                                        tf.reshape(e_partofspeech, shape=[cfg.batch_size, -1])], axis=1),
                                             axis=1)
-            alpha_attention_tile = tf.tile(alpha_attention, [1, cfg.word_embedding_size])
-            # [cfg.batch_size, 4 * cfg.word_embedding_size]
+            alpha_attention_tile = tf.tile(alpha_attention, [1, cfg.attention_size])
+            # [cfg.batch_size, 4 * cfg.attention_size]
             print("alpha_attention_tile shape is %s" % alpha_attention_tile.get_shape())
             # [cfg.batch_size, 4]
             print("alpha_attention shape is %s" % alpha_attention.get_shape())
@@ -359,7 +359,7 @@ class PSGModel():
             print("c_attention shape is %s" % c_attention.get_shape())
             self.proj_w = tf.get_variable(
                 'proj_w',
-                shape=(cfg.word_embedding_size, word_dictionary_size),
+                shape=(cfg.attention_size, word_dictionary_size),
                 initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                 dtype='float32'
             )
@@ -373,7 +373,7 @@ class PSGModel():
             self.cross_entropy_loss = tf.reduce_sum(tf.nn.softmax_cross_entropy_with_logits_v2(
                 labels=self.target_prob, logits=softmax_layer))
             print("cross_entropy_loss shape is %s" % self.cross_entropy_loss.get_shape())
-            self.opt = tf.train.AdamOptimizer().minimize(self.cross_entropy_loss)
+            self.opt = tf.train.AdamOptimizer(learning_rate=0.1).minimize(self.cross_entropy_loss)
             self.model = tf.train.Saver()
 
             #final_softmax_tensor = tf.nn.bias_add(tf.matmul(tf.reshape(concat_tensor, shape=[cfg.batch_size, -1]),
