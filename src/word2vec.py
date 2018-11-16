@@ -27,5 +27,5 @@ if __name__ == '__main__':
         sentences.append([item for item in [item.replace('\n', '') for item in line.split(' ')]])
     input_file.close()
 
-    model = gensim.models.Word2Vec(sentences, min_count=1, size=200, window=4, iter=15, negative=25, sample=1e-4)
+    model = gensim.models.Word2Vec(sentences, min_count=1, size=128, window=4, iter=15, negative=5, sample=1e-4)
     model.save(sys.argv[3])

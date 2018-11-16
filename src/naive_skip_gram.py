@@ -4,7 +4,7 @@
 # @Description : naive skip-gram for comparison
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import random
 import sys
 sys.path.append("..")
@@ -14,9 +14,11 @@ import numpy as np
 
 target_list = []
 context_list = []
+labels = []
+new_context_list = []
 word_dictionary_size = 0
-def load_sample(input_file, dict_file, related_file):
-    global target_list, context_list, word_dictionary_size
+def load_sample(input_file, dict_file, context_file):
+    global target_list, context_list, labels, new_context_list, word_dictionary_size
     word_dict = {}
     with open(dict_file, 'r') as f:
         for line in f:
@@ -30,13 +32,15 @@ def load_sample(input_file, dict_file, related_file):
             target_list.append(line.strip('\r\n'))
         f.close()
 
-    with open(related_file, 'r') as f:
+    with open(context_file, 'r') as f:
         for line in f:
             elements = line.strip('\r\n').split(',')
             context_list.extend(elements)
         f.close()
     target_list = np.asarray(target_list)
     context_list = np.asarray(context_list)
+    labels = np.zeros(shape=[context_list.shape[0], cfg.negative_sample_size + 1], dtype=np.int32)
+    new_context_list = np.zeros(shape=[context_list.shape[0]], dtype=np.int32)
 
 class SkipGramModel():
     def __init__(self, sess, output_file):
@@ -47,42 +51,45 @@ class SkipGramModel():
         self.sess = sess
         self.output_file = output_file
 
-        with tf.device('/gpu:1'):
+        with tf.device('/gpu:0'):
             with tf.variable_scope("skipgram_model"):
                 self.word_embed_weight = tf.get_variable(
                     'word_emb',
                     shape=(word_dictionary_size, cfg.word_embedding_size),
-                    initializer=tf.random_normal_initializer(stddev=cfg.stddev),
+                    initializer=tf.random_uniform_initializer(minval=-1, maxval=1),
                     dtype='float32'
                 )
 
             # [cfg.batch_size, cfg.word_embedding_size]
             word_embed_init = tf.nn.embedding_lookup(self.word_embed_weight, self.word)
             print('word_embed_init shape is %s' % word_embed_init.get_shape())
+            tanh_word_embed_init = tf.nn.tanh(word_embed_init)
+            print('tanh_word_embed_init shape is %s' % tanh_word_embed_init.get_shape())
 
             with tf.variable_scope("skipgram_model"):
                 proj_weight = tf.get_variable(
                     'proj_layer',
                     shape=(word_dictionary_size, cfg.word_embedding_size),
-                    initializer=tf.random_normal_initializer(stddev=cfg.stddev),
+                    initializer=tf.random_uniform_initializer(minval=-1, maxval=1),
                     dtype='float32'
                 )
+
                 print("proj_weight shape is %s" % proj_weight.get_shape())
                 proj_bias = tf.get_variable(
                     'proj_bias',
                     shape=(word_dictionary_size),
-                    initializer=tf.random_normal_initializer(stddev=cfg.stddev),
+                    initializer=tf.random_uniform_initializer(minval=-1, maxval=1),
                     dtype='float32'
                 )
                 print("proj_bias shape is %s" % proj_bias.get_shape())
             self.loss = tf.reduce_mean(
-                tf.nn.nce_loss(weights=proj_weight, biases=proj_bias, labels=tf.reshape(self.target, shape=[-1,1]), inputs=word_embed_init,
-                               num_sampled=cfg.negative_sample_size, num_classes=word_dictionary_size))
+                tf.nn.sampled_softmax_loss(weights=proj_weight, biases=proj_bias, labels=tf.reshape(self.target, shape=[-1,1]),
+                                       inputs=tanh_word_embed_init, num_sampled=cfg.negative_sample_size, num_classes=word_dictionary_size))
             self.opt = tf.train.AdamOptimizer().minimize(self.loss)
             self.model = tf.train.Saver()
 
             proj_layer = tf.nn.bias_add(tf.reshape(
-                tf.matmul(proj_weight, tf.reshape(word_embed_init, shape=[cfg.word_embedding_size, -1])),
+                tf.matmul(proj_weight, tf.reshape(tanh_word_embed_init, shape=[cfg.word_embedding_size, -1])),
                 shape=[-1, word_dictionary_size]
             ), proj_bias)
             # [cfg.batch_size, word_dictionary_size]
@@ -91,8 +98,8 @@ class SkipGramModel():
             # validation:
             softmax_layer = tf.reshape(tf.nn.softmax(logits=proj_layer), shape=[cfg.batch_size, -1])
             print("softmax_layer shape is %s" % softmax_layer.get_shape())
-            softmax_layer_list = tf.split(softmax_layer, cfg.batch_size)
-            validation_index_list = tf.split(self.validation_index, cfg.batch_size)
+            softmax_layer_list = tf.split(softmax_layer, num_or_size_splits=cfg.batch_size)
+            validation_index_list = tf.split(self.validation_index, num_or_size_splits=cfg.batch_size)
             embed_list = []
             for layer_index, layer in enumerate(softmax_layer_list):
                 emb_result = tf.squeeze(
@@ -100,9 +107,10 @@ class SkipGramModel():
                 embed_list.append(emb_result)
             index_score = tf.convert_to_tensor(embed_list)
             print("index_score shape is %s" % index_score.get_shape())
-            predict_result = tf.cast(tf.argmax(index_score, axis=1), dtype=tf.int32)
-            print("predict_result shape is %s" % predict_result.get_shape())
-            comparison = tf.equal(predict_result, self.validation_target)
+            self.predict_result = tf.cast(tf.argmax(index_score, axis=1), dtype=tf.int32)
+            print("predict_result shape is %s" % self.predict_result.get_shape())
+
+            comparison = tf.equal(self.validation_target, self.predict_result)
             print("comparison shape is %s" % comparison.get_shape())
             self.accuracy = tf.reduce_mean(tf.cast(comparison, dtype=tf.float32))
 
@@ -122,7 +130,7 @@ class SkipGramModel():
             self.target: word2})
 
     def validate(self, word1, validation_index, validation_target):
-        return self.sess.run(self.accuracy, feed_dict={
+        return self.sess.run([self.predict_result, self.accuracy], feed_dict={
             self.word: word1,
             self.validation_index: validation_index,
             self.validation_target: validation_target
@@ -141,14 +149,15 @@ class SkipGramModel():
         self.model.save(sess, self.output_file)
 
 if __name__ == '__main__':
-    if len(sys.argv) < 6:
-        print("skipgram <input file> <dict file> <related file> <output model> <word emb model>")
+    if len(sys.argv) < 7:
+        print("skipgram <input file> <dict file> <context file> <negative sample file> <output model> <word emb model>")
         sys.exit()
 
     load_sample(sys.argv[1], sys.argv[2], sys.argv[3])
     total_sample_size = context_list.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
+    train_set_offset = int(total_sample_size * cfg.train_set_ratio)
     train_set_size_fake = int(total_batch_size * 1)
 
     targets = []
@@ -157,26 +166,38 @@ if __name__ == '__main__':
             targets.append(i)
     targets = np.asarray(targets)
 
-    labels = np.zeros(shape=[total_sample_size, cfg.negative_sample_size + 1])
-    for index, word in enumerate(context_list[train_set_size + 1:]):
+    with open(sys.argv[4], 'r') as f:
+        for idx, line in enumerate(f):
+            elements = [int(item) for item in line.strip('\r\n').split(',')]
+            labels[idx] = np.asarray(elements)
+            for sub_idx, element in enumerate(elements):
+                if int(element) == int(context_list[idx]):
+                    new_context_list[idx] = sub_idx
+                    break
+        f.close()
+
+    '''
+    for index, word in enumerate(context_list):
         sub_labels = np.zeros(shape=[cfg.negative_sample_size + 1])
         iter = 0
         sub_labels[iter] = word
         iter += 1
         while iter <= cfg.negative_sample_size:
-            r = random.randint(1, word_dictionary_size)
+            r = random.randint(0, word_dictionary_size - 1)
             if r != word:
                 sub_labels[iter] = r
                 iter += 1
         np.random.shuffle(sub_labels)  # shuffle positive and negative samples
         labels[index] = sub_labels
+    np.savetxt('neg.csv', labels, fmt="%s", delimiter=',')
+    '''
 
     print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d' %
           (total_batch_size, train_set_size, word_dictionary_size))
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
-        SkipGramObj = SkipGramModel(sess, sys.argv[4])
+        SkipGramObj = SkipGramModel(sess, sys.argv[5])
         tf.global_variables_initializer().run()
         train_writer = tf.summary.FileWriter(cfg.summaries_dir + cfg.sg_train_summary_writer_path, sess.graph)
         test_writer = tf.summary.FileWriter(cfg.summaries_dir + cfg.sg_test_summary_writer_path, sess.graph)
@@ -184,7 +205,7 @@ if __name__ == '__main__':
         trainable = False
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
-            for i in range(train_set_size):
+            for i in range(train_set_size_fake):
                 if trainable is True:
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
@@ -197,17 +218,17 @@ if __name__ == '__main__':
 
             accuracy = 0.0
             for j in range(total_batch_size - train_set_size):
-                j += train_set_size
-                iter_accuracy = SkipGramObj.validate(targets[j*cfg.batch_size : (j+1)*cfg.batch_size],
-                                                     labels[j*cfg.batch_size : (j+1)*cfg.batch_size],
-                                                     context_list[(j-train_set_size)*cfg.batch_size : (j+1-train_set_size)*cfg.batch_size])
+                k = j + train_set_size
+                predict_result, iter_accuracy = SkipGramObj.validate(targets[k*cfg.batch_size : (k+1)*cfg.batch_size],
+                                                     labels[k*cfg.batch_size : (k+1)*cfg.batch_size],
+                                                     new_context_list[k*cfg.batch_size : (k+1)*cfg.batch_size])
                 accuracy += iter_accuracy
             print("iter %d : accuracy %f" % (epoch_index, accuracy / (total_batch_size - train_set_size)))
             test_accuracy = SkipGramObj.get_accuracy_summary(accuracy / (total_batch_size - train_set_size))
             test_writer.add_summary(test_accuracy, epoch_index + 1)
 
         embed_weight = SkipGramObj.get_word_emb()
-        output_embed_file = open(sys.argv[5], 'w')
+        output_embed_file = open(sys.argv[6], 'w')
         for embed_item in embed_weight:
             embed_list = list(embed_item)
             embed_list = [str(item) for item in embed_list]
