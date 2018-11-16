@@ -4,7 +4,7 @@
 # @Description : naive skip-gram for comparison
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import random
 import sys
 sys.path.append("..")
@@ -51,7 +51,7 @@ class SkipGramModel():
         self.sess = sess
         self.output_file = output_file
 
-        with tf.device('/gpu:0'):
+        with tf.device('/gpu:1'):
             with tf.variable_scope("skipgram_model"):
                 self.word_embed_weight = tf.get_variable(
                     'word_emb',
@@ -203,6 +203,8 @@ if __name__ == '__main__':
         test_writer = tf.summary.FileWriter(cfg.summaries_dir + cfg.sg_test_summary_writer_path, sess.graph)
 
         trainable = False
+        prev_avg_accu = 0.0
+        cur_avg_accu = 0.0
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
             for i in range(train_set_size_fake):
@@ -224,6 +226,17 @@ if __name__ == '__main__':
                                                      new_context_list[k*cfg.batch_size : (k+1)*cfg.batch_size])
                 accuracy += iter_accuracy
             print("iter %d : accuracy %f" % (epoch_index, accuracy / (total_batch_size - train_set_size)))
+            if epoch_index < cfg.early_stop_iter:
+                prev_avg_accu += accuracy
+            elif epoch_index % cfg.early_stop_iter == 0 and epoch_index / cfg.early_stop_iter > 1:
+                if cur_avg_accu < prev_avg_accu:
+                    print("training converge in epoch %d" % epoch_index)
+                    break
+                else:
+                    prev_avg_accu = cur_avg_accu
+                    cur_avg_accu = 0.0
+            else:
+                cur_avg_accu += accuracy
             test_accuracy = SkipGramObj.get_accuracy_summary(accuracy / (total_batch_size - train_set_size))
             test_writer.add_summary(test_accuracy, epoch_index + 1)
 

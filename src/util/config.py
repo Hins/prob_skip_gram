@@ -25,6 +25,7 @@ flags.DEFINE_integer('accumulative_metric_count', 5, 'accumulative metric count'
 flags.DEFINE_float('stddev', 0.8, 'stddev for W initializer')
 flags.DEFINE_integer('negative_sample_size', 5, 'negative sample size')
 flags.DEFINE_integer('epoch_size', 100, 'epoch size')
+flags.DEFINE_integer('early_stop_iter', 10, 'early stop iteration')
 
 flags.DEFINE_string('coocur_separator', '#', 'words coocurrence separator')
 
