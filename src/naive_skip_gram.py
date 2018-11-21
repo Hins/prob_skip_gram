@@ -64,6 +64,7 @@ class SkipGramModel():
             word_embed_init = tf.nn.embedding_lookup(self.word_embed_weight, self.word)
             print('word_embed_init shape is %s' % word_embed_init.get_shape())
             tanh_word_embed_init = tf.nn.tanh(word_embed_init)
+            # [cfg.batch_size, cfg.word_embedding_size]
             print('tanh_word_embed_init shape is %s' % tanh_word_embed_init.get_shape())
 
             with tf.variable_scope("skipgram_model"):
@@ -83,8 +84,8 @@ class SkipGramModel():
                 )
                 print("proj_bias shape is %s" % proj_bias.get_shape())
             self.loss = tf.reduce_mean(
-                tf.nn.sampled_softmax_loss(weights=proj_weight, biases=proj_bias, labels=tf.reshape(self.target, shape=[-1,1]),
-                                       inputs=tanh_word_embed_init, num_sampled=cfg.negative_sample_size, num_classes=word_dictionary_size))
+                tf.nn.nce_loss(weights=proj_weight, biases=proj_bias, labels=tf.reshape(self.target, shape=[-1,1]),
+                               inputs=tanh_word_embed_init, num_sampled=cfg.negative_sample_size, num_classes=word_dictionary_size))
             self.opt = tf.train.AdamOptimizer().minimize(self.loss)
             self.model = tf.train.Saver()
 
@@ -96,7 +97,7 @@ class SkipGramModel():
             print("proj_layer shape is %s" % proj_layer.get_shape())
 
             # validation:
-            softmax_layer = tf.reshape(tf.nn.softmax(logits=proj_layer), shape=[cfg.batch_size, -1])
+            softmax_layer = tf.reshape(tf.nn.softmax(logits=proj_layer, axis=1), shape=[cfg.batch_size, -1])
             print("softmax_layer shape is %s" % softmax_layer.get_shape())
             softmax_layer_list = tf.split(softmax_layer, num_or_size_splits=cfg.batch_size)
             validation_index_list = tf.split(self.validation_index, num_or_size_splits=cfg.batch_size)
@@ -176,22 +177,6 @@ if __name__ == '__main__':
                     break
         f.close()
 
-    '''
-    for index, word in enumerate(context_list):
-        sub_labels = np.zeros(shape=[cfg.negative_sample_size + 1])
-        iter = 0
-        sub_labels[iter] = word
-        iter += 1
-        while iter <= cfg.negative_sample_size:
-            r = random.randint(0, word_dictionary_size - 1)
-            if r != word:
-                sub_labels[iter] = r
-                iter += 1
-        np.random.shuffle(sub_labels)  # shuffle positive and negative samples
-        labels[index] = sub_labels
-    np.savetxt('neg.csv', labels, fmt="%s", delimiter=',')
-    '''
-
     print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d' %
           (total_batch_size, train_set_size, word_dictionary_size))
 
@@ -205,6 +190,8 @@ if __name__ == '__main__':
         trainable = False
         prev_avg_accu = 0.0
         cur_avg_accu = 0.0
+        prev_loss = 0.0
+        cur_loss = 0.0
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
             for i in range(train_set_size_fake):
@@ -228,15 +215,20 @@ if __name__ == '__main__':
             print("iter %d : accuracy %f" % (epoch_index, accuracy / (total_batch_size - train_set_size)))
             if epoch_index < cfg.early_stop_iter:
                 prev_avg_accu += accuracy
+                prev_loss += loss_sum
             elif epoch_index % cfg.early_stop_iter == 0 and epoch_index / cfg.early_stop_iter > 1:
-                if cur_avg_accu < prev_avg_accu:
-                    print("training converge in epoch %d" % epoch_index)
+                if cur_avg_accu <= prev_avg_accu and prev_loss <= cur_loss:
+                    print("training converge in epoch %d: prev_accu %f, cur_accu %f, prev_loss %f, cur_loss %f" %
+                          (epoch_index, prev_avg_accu, cur_avg_accu, prev_loss, cur_loss))
                     break
                 else:
                     prev_avg_accu = cur_avg_accu
-                    cur_avg_accu = 0.0
+                    cur_avg_accu = accuracy
+                    prev_loss = cur_loss
+                    cur_loss = loss_sum
             else:
                 cur_avg_accu += accuracy
+                cur_loss += loss_sum
             test_accuracy = SkipGramObj.get_accuracy_summary(accuracy / (total_batch_size - train_set_size))
             test_writer.add_summary(test_accuracy, epoch_index + 1)
 

@@ -23,9 +23,9 @@ def cosin_distance(vector1, vector2):
         return dot_product / ((normA * normB) ** 0.5)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 6:
+    if len(sys.argv) < 8:
         print("evaluate_pearson_correlation <word_emb_type> <word_emb> "
-              "<word_dict> <evaluation_dataset> <evaluation_ds>")
+              "<word_dict> <other info> <other info emb> <evaluation_dataset> <evaluation_ds>")
         sys.exit()
 
     if sys.argv[1].lower() == "file":
@@ -45,13 +45,25 @@ if __name__ == "__main__":
                 reverse_word_dict[int(elements[1])] = elements[0]
             f.close()
 
-        if sys.argv[4].lower() == 'men':
+        other_index = []
+        with open(sys.argv[4], 'r') as f:
+            for line in f:
+                other_index.append(line.strip('\r\n').split(','))
+            f.close()
+
+        other_emb = {}
+        with open(sys.argv[5], 'r') as f:
+            for idx, line in enumerate(f):
+                other_emb[idx] = [float(item) for item in line.strip('\r\n').split(',')]
+            f.close()
+
+        if sys.argv[6].lower() == 'men':
             # MEN dataset: MEN_dataset_natural_form_full/MEN_dataset_lemma_form_full
             WORD_SEPARATOR = '_'
             word_pair_dict = {}
             index_dict = {}
             pred_score_dict = {}
-            with open(sys.argv[5], 'r') as f:
+            with open(sys.argv[7], 'r') as f:
                 counter = 0
                 real_counter = 0
                 for idx, line in enumerate(f):

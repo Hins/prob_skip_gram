@@ -50,8 +50,8 @@ class GooleKGAPI(object):
         service_url = 'https://kgsearch.googleapis.com/v1/entities:search'
         url = service_url + '?' + urllib.urlencode(params)
         proxies = {
-            "http": "http://106.46.136.112:808",
-            "https": "http://106.46.136.112:808",
+            "http": "http://10.236.10.254:3128",
+            "https": "http://10.236.10.254:3128",
         }
         response = json.loads(requests.get(url=url, proxies=proxies).text)
         if "itemListElement" not in response or len(response['itemListElement']) == 0 or \
@@ -84,7 +84,14 @@ if __name__ == "__main__":
                 kb_output.flush()
             else:
                 if word_dict[id] not in kb_cache_dict:
-                    kb_list = gkg.getResult(word_dict[id])
+                    try:
+                        kb_list = gkg.getResult(word_dict[id])
+                    except:
+                        print("%s can't get proper response" % word_dict[id])
+                        kb_output.write("0\n")
+                        kb_output.flush()
+                        kb_cache_dict[word_dict[id]] = "0"
+                        continue
                     if isinstance(kb_list, str):
                         kb_output.write("0\n")
                         kb_output.flush()
