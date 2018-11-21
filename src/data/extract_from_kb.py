@@ -50,8 +50,8 @@ class GooleKGAPI(object):
         service_url = 'https://kgsearch.googleapis.com/v1/entities:search'
         url = service_url + '?' + urllib.urlencode(params)
         proxies = {
-            "http": "http://10.236.10.254:3128",
-            "https": "http://10.236.10.254:3128",
+            "http": "http://106.46.136.112:808",
+            "https": "http://106.46.136.112:808",
         }
         response = json.loads(requests.get(url=url, proxies=proxies).text)
         if "itemListElement" not in response or len(response['itemListElement']) == 0 or \
