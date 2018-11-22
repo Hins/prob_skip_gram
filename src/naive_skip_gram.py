@@ -5,7 +5,6 @@
 
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
-import random
 import sys
 sys.path.append("..")
 import tensorflow as tf
@@ -201,8 +200,8 @@ if __name__ == '__main__':
                 _, iter_loss = SkipGramObj.train(targets[i * cfg.batch_size:(i+1) * cfg.batch_size],
                                                  context_list[i * cfg.batch_size:(i+1) * cfg.batch_size])
                 loss_sum += iter_loss
-            print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size))
-            train_loss = SkipGramObj.get_loss_summary(np.sum(loss_sum) / cfg.batch_size)
+            print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / cfg.batch_size))
+            train_loss = SkipGramObj.get_loss_summary(loss_sum / cfg.batch_size)
             train_writer.add_summary(train_loss, epoch_index + 1)
 
             accuracy = 0.0

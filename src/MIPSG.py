@@ -4,7 +4,7 @@
 # @Description : MIPSG-I, use softmax to map multi-source embedding info to target distribution
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import sys
 from tensorflow.contrib import rnn
 import tensorflow as tf
@@ -72,7 +72,7 @@ def load_sample(target_file, word_dict_file, context_file, pos_file, pos_dict_fi
                         sub_context_prob.append(1.0 / float(cfg.context_window_size))
                 else:
                     sub_context_prob = [float(item) / float(accumulate_count) for item in sub_context_prob]
-            context_prob.append(sub_context_prob)
+            context_prob.append(np.power(sub_context_prob, cfg.normalize_value))
         f.close()
     with open(pos_file, 'r') as f:
         for line in f:
@@ -129,7 +129,7 @@ def load_sample(target_file, word_dict_file, context_file, pos_file, pos_dict_fi
 
     return [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size]
 
-class MIPSG2():
+class MIPSG():
     def __init__(self, sess):
         """
         :param sess: session passed by main entry function
@@ -157,7 +157,7 @@ class MIPSG2():
         self.validation_target_prob = tf.placeholder(shape=[cfg.batch_size, cfg.context_window_size], dtype=tf.float32)
         self.sess = sess
 
-        with tf.device('/gpu:0'):
+        with tf.device('/gpu:1'):
             with tf.variable_scope("psg_model"):
                 self.word_embed_weight = tf.get_variable(
                     'word_emb',
@@ -244,7 +244,7 @@ class MIPSG2():
                 initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                 dtype='float32'
             )
-            self.cross_entropy_loss = tf.nn.nce_loss(weights=self.softmax_w,
+            self.cross_entropy_loss = tf.reduce_mean(tf.nn.nce_loss(weights=self.softmax_w,
                                                      biases=self.softmax_b,
                                                      labels=self.target_id,
                                                      inputs=middle_layer,
@@ -254,12 +254,14 @@ class MIPSG2():
                                                      sampled_values=[tf.reshape(self.sampled_candidates, shape=[-1]),
                                                                      self.target_prob,
                                                                      tf.reshape(self.sampled_expected_count,
-                                                                                shape=[-1])])
+                                                                                shape=[-1])]))
             self.opt = tf.train.AdamOptimizer().minimize(self.cross_entropy_loss)
             self.model = tf.train.Saver()
 
             # get prediction result from softmax according by target_id information
-            softmax_layer = tf.nn.softmax(tf.nn.bias_add(tf.matmul(middle_layer, self.softmax_w), self.softmax_b),
+            softmax_layer = tf.nn.softmax(tf.nn.bias_add(tf.matmul(middle_layer,
+                                                                   tf.reshape(self.softmax_w, shape=[-1, word_dictionary_size])),
+                                                                   self.softmax_b),
                                           axis=1)
             # [cfg.batch_size, word_dictionary_size]
             print("softmax_layer shape is %s" % softmax_layer.get_shape())
@@ -290,7 +292,7 @@ class MIPSG2():
                 self.loss_summary = tf.summary.scalar('average_loss', self.average_loss)
 
     def train(self, dictionary, kb_relation, parser, partofspeech, target_id, target_prob, sampled_candidates, sampled_expected_count):
-        return self.sess.run([self.opt, self.cross_entropy_loss], feed_dict={
+        return self.sess.run([self.opt, self.cross_entropy_loss, self.word_embed_weight, self.parser_embed_weight, self.partofspeech_embed_weight, self.kb_relation_embed_weight, self.softmax_w, self.softmax_b], feed_dict={
             self.dictionary: dictionary,
             self.kb_relation: kb_relation,
             self.parser: parser,
@@ -366,7 +368,7 @@ if __name__ == '__main__':
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
-        PSGModelObj = MIPSG2(sess)
+        PSGModelObj = MIPSG(sess)
         tf.global_variables_initializer().run()
         train_writer = tf.summary.FileWriter(cfg.summaries_dir + cfg.psg_train_summary_writer_path, sess.graph)
         test_writer = tf.summary.FileWriter(cfg.summaries_dir + cfg.psg_test_summary_writer_path, sess.graph)
@@ -375,23 +377,26 @@ if __name__ == '__main__':
         values = sess.run(variables_names)
         for k, v in zip(variables_names, values):
             print(k)
-
         trainable = False
+
+        prev_word_embed_weight = []
+        prev_parser_embed_weight = []
+        prev_partofspeech_embed_weight = []
+        prev_kb_relation_embed_weight = []
+        prev_softmax_w = []
+        prev_softmax_b = []
+
+        prev_avg_accu = 0.0
+        cur_avg_accu = 0.0
+        prev_loss = 0.0
+        cur_loss = 0.0
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
             for i in range(total_batch_size):
                 if trainable is True:
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
-                context_prob_info = context_prob[i*cfg.batch_size:(i+1)*cfg.batch_size]
-                context_prob_1st_dim = context_prob_info.shape[0]
-                context_prob_2nd_dim = context_prob_info.shape[1]
-                # context_prob_tmp's shape is [cfg.batch_size, word_dictionary_size]
-                context_prob_tmp = np.zeros(shape=[context_prob_1st_dim, word_dictionary_size])
-                for idx, val in enumerate(context_prob[i*cfg.batch_size:(i+1)*cfg.batch_size]):
-                    for sub_idx, sub_val in enumerate(val):
-                        context_prob_tmp[idx][int(context[i*cfg.batch_size + idx][sub_idx])] = sub_val
-                _, iter_loss = PSGModelObj.train(
+                _, iter_loss, word_embed_weight, parser_embed_weight, partofspeech_embed_weight, kb_relation_embed_weight, softmax_w, softmax_b = PSGModelObj.train(
                                                  dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
@@ -401,13 +406,25 @@ if __name__ == '__main__':
                                                  sampled_candidates[i * cfg.batch_size:(i + 1) * cfg.batch_size],
                                                  sampled_expected_count[i * cfg.batch_size:(i + 1) * cfg.batch_size])
                 loss_sum += iter_loss
-            print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size / total_batch_size))
-            train_loss = PSGModelObj.get_loss_summary(np.sum(loss_sum) / cfg.batch_size / total_batch_size)
+            if epoch_index == 0:
+                prev_word_embed_weight = word_embed_weight[0][0]
+                prev_parser_embed_weight = parser_embed_weight[0][0]
+                prev_partofspeech_embed_weight = partofspeech_embed_weight[0][0]
+                prev_kb_relation_embed_weight = kb_relation_embed_weight[0][0]
+                prev_softmax_w = softmax_w[0][0]
+                prev_softmax_b = softmax_b[0]
+            else:
+                if prev_word_embed_weight == word_embed_weight[0][0]:
+                    print("word_embed_weight not update")
+                if prev_parser_embed_weight == parser_embed_weight[0][0]:
+                    print("parser_embed_weight not update")
+                if prev_partofspeech_embed_weight == partofspeech_embed_weight[0][0]:
+                    print("partofspeech")
+            print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / cfg.batch_size / total_batch_size))
+            train_loss = PSGModelObj.get_loss_summary(loss_sum / cfg.batch_size / total_batch_size)
             train_writer.add_summary(train_loss, epoch_index + 1)
 
             accuracy = 0.0
-            prev_avg_accu = 0.0
-            cur_avg_accu = 0.0
             for j in range(total_batch_size):
                 iter_accuracy = PSGModelObj.validate(
                                                      dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
@@ -421,6 +438,7 @@ if __name__ == '__main__':
             print("iter %d : accuracy %f" % (epoch_index, accuracy / total_batch_size / cfg.batch_size))
             if epoch_index < cfg.early_stop_iter:
                 prev_avg_accu += accuracy
+                prev_loss += loss_sum
             elif epoch_index % cfg.early_stop_iter == 0 and epoch_index / cfg.early_stop_iter > 1:
                 if cur_avg_accu <= prev_avg_accu and prev_loss <= cur_loss:
                     print("training converge in epoch %d: prev_accu %f, cur_accu %f, prev_loss %f, cur_loss %f" %

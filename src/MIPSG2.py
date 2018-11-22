@@ -72,7 +72,7 @@ def load_sample(target_file, word_dict_file, context_file, pos_file, pos_dict_fi
                         sub_context_prob.append(1.0 / float(cfg.context_window_size))
                 else:
                     sub_context_prob = [float(item) / float(accumulate_count) for item in sub_context_prob]
-            context_prob.append(np.power(sub_context_prob, 4.0/3.0))
+            context_prob.append(np.power(sub_context_prob, cfg.normalize_value))
         f.close()
     with open(pos_file, 'r') as f:
         for line in f:
@@ -394,7 +394,7 @@ class MIPSG2():
                 initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                 dtype='float32'
             )
-            self.cross_entropy_loss = tf.nn.nce_loss(weights=self.proj_w,
+            self.cross_entropy_loss = tf.reduce_mean(tf.nn.nce_loss(weights=self.proj_w,
                                                      biases=self.proj_b,
                                                      labels=self.target_id,
                                                      inputs=c_attention,
@@ -404,7 +404,7 @@ class MIPSG2():
                                                      sampled_values=[tf.reshape(self.sampled_candidates, shape=[-1]),
                                                                      self.target_prob,
                                                                      tf.reshape(self.sampled_expected_count,
-                                                                                shape=[-1])])
+                                                                                shape=[-1])]))
             self.opt = tf.train.AdamOptimizer().minimize(self.cross_entropy_loss)
             self.model = tf.train.Saver()
 
@@ -437,7 +437,7 @@ class MIPSG2():
                 self.loss_summary = tf.summary.scalar('average_loss', self.average_loss)
 
     def train(self, dictionary, kb_relation, parser, partofspeech, target_id, target_prob, sampled_candidates, sampled_expected_count):
-        return self.sess.run([self.opt, self.cross_entropy_loss, self.sampled_candidates], feed_dict={
+        return self.sess.run([self.opt, self.cross_entropy_loss], feed_dict={
             self.dictionary: dictionary,
             self.kb_relation: kb_relation,
             self.parser: parser,
@@ -521,8 +521,12 @@ if __name__ == '__main__':
         values = sess.run(variables_names)
         for k, v in zip(variables_names, values):
             print(k)
-
         trainable = False
+
+        prev_avg_accu = 0.0
+        cur_avg_accu = 0.0
+        prev_loss = 0.0
+        cur_loss = 0.0
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
             for i in range(total_batch_size):
@@ -530,7 +534,7 @@ if __name__ == '__main__':
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
 
-                _, iter_loss, partofspeech_embed_weight = PSGModelObj.train(
+                _, iter_loss = PSGModelObj.train(
                                                  dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
@@ -540,15 +544,11 @@ if __name__ == '__main__':
                                                  sampled_candidates[i*cfg.batch_size:(i+1)*cfg.batch_size],
                                                  sampled_expected_count[i*cfg.batch_size:(i+1)*cfg.batch_size])
                 loss_sum += iter_loss
-            print("epoch_index %d, loss is %f" % (epoch_index, np.sum(loss_sum) / cfg.batch_size / total_batch_size))
-            train_loss = PSGModelObj.get_loss_summary(np.sum(loss_sum) / cfg.batch_size / total_batch_size)
+            print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / cfg.batch_size / total_batch_size))
+            train_loss = PSGModelObj.get_loss_summary(loss_sum / cfg.batch_size / total_batch_size)
             train_writer.add_summary(train_loss, epoch_index + 1)
 
             accuracy = 0.0
-            prev_avg_accu = 0.0
-            cur_avg_accu = 0.0
-            prev_loss = 0.0
-            cur_loss = 0.0
             for j in range(total_batch_size):
                 iter_accuracy = PSGModelObj.validate(
                                                      dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],

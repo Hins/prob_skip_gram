@@ -17,6 +17,7 @@ flags.DEFINE_integer('context_window_size', 4, 'context window size')
 flags.DEFINE_integer('dict_lstm_hidden_size', 128, 'dictionary lstm model hidden size')
 flags.DEFINE_integer('target_lstm_hidden_size', 300, 'target lstm model hidden size')
 flags.DEFINE_integer('attention_size', 400, 'attention parameter v size')
+flags.DEFINE_float('normalize_value', 1.33, 'positive sample normalized value')
 
 flags.DEFINE_float('train_set_ratio', 0.8, 'train set ratio')
 flags.DEFINE_integer('batch_size', 150, 'train batch size')
@@ -26,6 +27,8 @@ flags.DEFINE_float('stddev', 0.8, 'stddev for W initializer')
 flags.DEFINE_integer('negative_sample_size', 5, 'negative sample size')
 flags.DEFINE_integer('epoch_size', 100, 'epoch size')
 flags.DEFINE_integer('early_stop_iter', 10, 'early stop iteration')
+
+flags.DEFINE_integer('sentiment_classification_num', 5, 'sentiment analysis classification number')
 
 flags.DEFINE_string('coocur_separator', '#', 'words coocurrence separator')
 
