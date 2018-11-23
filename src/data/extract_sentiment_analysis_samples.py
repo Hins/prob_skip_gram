@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time        : 2018/11/22 15:57
 # @Author      : panxiaotong
-# @Description : extract sentiment analysis data
+# @Description : extract sentiment analysis data from Stanford sentiment Treebank dataset
 
 import sys
 
