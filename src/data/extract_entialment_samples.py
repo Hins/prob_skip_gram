@@ -6,8 +6,9 @@
 import sys
 
 if __name__ == "__main__":
-    if len(sys.argv) < 5:
-        print("extract_entailment_samples <input file> <word dict> <output file1> <output file2>")
+    if len(sys.argv) < 7:
+        print("extract_entailment_samples <input file> <word dict> <output file1> <output file2>"
+              "<output single class dict> <output complex class dict>")
         sys.exit()
 
     word_dict = {}
@@ -62,7 +63,7 @@ if __name__ == "__main__":
                                 "\t" + score + "\t" + str(single_class_dict[class_single]) + "\n")
             sub_class1_single = elements[5]
             sub_class2_single = elements[6]
-            total_class = sub_class1_single + "_" + sub_class2_single
+            total_class = sub_class1_single + "&" + sub_class2_single
             if total_class not in complex_class_dict:
                 complex_class_dict[total_class] = len(complex_class_dict)
             output_complex.write(",".join(id1_list) + "\t" + ",".join(id2_list) +
@@ -71,3 +72,13 @@ if __name__ == "__main__":
 
     output_single.close()
     output_complex.close()
+
+    single_class_output = open(sys.argv[5], 'w')
+    for k,v in single_class_dict.items():
+        single_class_output.write(k + "\t" + str(v) + "\n")
+    single_class_output.close()
+
+    complex_class_output = open(sys.argv[6], 'w')
+    for k,v in complex_class_dict.items():
+        complex_class_output.write(k + "\t" + str(v) + "\n")
+    complex_class_output.close()

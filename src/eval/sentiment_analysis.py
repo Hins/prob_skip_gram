@@ -155,6 +155,11 @@ if __name__ == '__main__':
         sentimentObj = sentimentModel(sess, sys.argv[3].lower())
         tf.global_variables_initializer().run()
 
+        variables_names = [v.name for v in tf.trainable_variables()]
+        values = sess.run(variables_names)
+        for k, v in zip(variables_names, values):
+            print(k)
+
         trainable = False
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
