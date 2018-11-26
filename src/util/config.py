@@ -32,6 +32,8 @@ flags.DEFINE_integer('sentiment_classification_num', 5, 'sentiment analysis clas
 
 flags.DEFINE_string('coocur_separator', '#', 'words coocurrence separator')
 
+flags.DEFINE_string('', )
+
 flags.DEFINE_string('summaries_dir', '../tb/PSG', 'Summaries directory')
 flags.DEFINE_string('psg_train_summary_writer_path', '/psg_train', 'psg train summary writer path')
 flags.DEFINE_string('psg_test_summary_writer_path', '/psg_test', 'psg test summary writer path')

@@ -8,185 +8,178 @@ import operator
 import sys
 import gensim
 import scipy.stats as stats
-
-def cosin_distance(vector1, vector2):
-    dot_product = 0.0
-    normA = 0.0
-    normB = 0.0
-    for a, b in zip(vector1, vector2):
-        dot_product += a * b
-        normA += a ** 2
-        normB += b ** 2
-    if normA == 0.0 or normB == 0.0:
-        return None
-    else:
-        return dot_product / ((normA * normB) ** 0.5)
+from util import extract_features, cosin_distance
 
 if __name__ == "__main__":
-    if len(sys.argv) < 8:
-        print("evaluate_pearson_correlation <word_emb_type> <word_emb> "
-              "<word_dict> <other info> <other info emb> <evaluation_dataset> <evaluation_ds>")
+    """
+    Args:
+        word_emb_type: word embed training method, file/w2v, latter was got from Gensim
+        word_emb: word embedding file
+        word_dict: word dictionary file
+        use_other_info: whether to use other information, false or word,pos,parser,dict,kb
+            split by ,
+        word_ ids: target word id file
+        pos_ids: part-of-speech id file
+        pos_emb: part-of-speech embedding file
+        parser_ids: parser id file
+        parser_emb: parser embedding file
+        dict_desc_ids: dictionary description ids file
+        kb_ids: knowledge-graph entity ids file
+        kb_emb: knowledge-graph embedding file
+        evaluation_ds: evaluation dataset file
+    """
+    if len(sys.argv) < 14:
+        print("evaluate_pearson_correlation <word_emb_type> <word_emb> <word_dict> <use_other_info> <word_ids> <pos_ids> "
+              "<pos_emb> <parser_ids> <parser_emb> <dict_desc_ids> <kb_ids> <kb_emb> <evaluation_ds>")
         sys.exit()
 
     if sys.argv[1].lower() == "file":
-        word_emb_list = {}
+        word_emb_dict = {}
         with open(sys.argv[2], 'r') as f:
             for idx, line in enumerate(f):
-                elements = line.strip('\r\n').split(',')
-                word_emb_list[idx + 1] = [float(item) for item in elements]
+                # key is word index in dictionary, value is embedding vector
+                word_emb_dict[idx] = [float(item) for item in line.strip('\r\n').split(',')]
             f.close()
+        word_emb_size = len(word_emb_dict[0])
 
         word_dict = {}
         reverse_word_dict = {}
         with open(sys.argv[3], 'r') as f:
             for line in f:
                 elements = line.strip('\r\n').split('\t')
+                # key is word, value is word index in dictionary
                 word_dict[elements[0]] = int(elements[1])
+                # key is word index in dictionary, value is word
                 reverse_word_dict[int(elements[1])] = elements[0]
             f.close()
 
-        other_index = []
-        with open(sys.argv[4], 'r') as f:
-            for line in f:
-                other_index.append(line.strip('\r\n').split(','))
-            f.close()
+        use_other_info = sys.argv[4].lower()
 
-        other_emb = {}
+        word_id_list = []
         with open(sys.argv[5], 'r') as f:
-            for idx, line in enumerate(f):
-                other_emb[idx] = [float(item) for item in line.strip('\r\n').split(',')]
+            for line in f:
+                word_id_list.append(int(line.strip('\r\n')))
             f.close()
 
-        if sys.argv[6].lower() == 'men':
-            # MEN dataset: MEN_dataset_natural_form_full/MEN_dataset_lemma_form_full
-            WORD_SEPARATOR = '_'
-            word_pair_dict = {}
-            index_dict = {}
-            pred_score_dict = {}
-            with open(sys.argv[7], 'r') as f:
-                counter = 0
-                real_counter = 0
-                for idx, line in enumerate(f):
-                    elements = line.strip('\r\n').split(' ')
-                    word_1 = elements[0].split('-')[0]
-                    word_2 = elements[1].split('-')[0]
-                    score = float(elements[2])
-                    word_pair_dict[word_1 + WORD_SEPARATOR + word_2] = score
-                    if word_1 in word_dict and word_2 in word_dict:
-                        pred_score_dict[counter] = cosin_distance(word_emb_list[word_dict[word_1]],
-                                                                  word_emb_list[word_dict[word_2]])
-                        index_dict[counter] = score
-                        counter += 1
-                    real_counter += 1
-                f.close()
-            sorted_x = sorted(index_dict.items(), key=operator.itemgetter(1))
-            real_value_list = []
-            for k,v in sorted_x:
-                real_value_list.append(k)
-            sorted_x = sorted(pred_score_dict.items(), key=operator.itemgetter(1))
-            pred_value_list = []
-            for k,v in sorted_x:
-                pred_value_list.append(k)
-            print(stats.pearsonr(real_value_list, pred_value_list)[0])
+        pos_dict = {}
+        with open(sys.argv[6], 'r') as f:
+            for idx, line in enumerate(f):
+                element = int(line.strip('\r\n'))
+                if reverse_word_dict[word_id_list[idx]] not in pos_dict:
+                    pos_dict[reverse_word_dict[word_id_list[idx]]] = element
+            f.close()
 
-        if sys.argv[4].lower() == 'wordsim353':
-            # WordSim353 dataset: combined.csv
-            WORD_SEPARATOR = '_'
-            word_pair_dict = {}
-            index_dict = {}
-            pred_score_dict = {}
-            with open(sys.argv[5], 'r') as f:
-                counter = 0
-                real_counter = 0
-                for idx, line in enumerate(f):
-                    if idx == 0:
+        pos_emb_dict = {}
+        with open(sys.argv[7], 'r') as f:
+            for idx, line in enumerate(f):
+                # key is word index in dictionary, value is embedding vector
+                pos_emb_dict[idx] = [float(item) for item in line.strip('\r\n').split(',')]
+            f.close()
+
+        parser_dict = {}
+        with open(sys.argv[8], 'r') as f:
+            for idx, line in enumerate(f):
+                if reverse_word_dict[word_id_list[idx]] not in parser_dict:
+                    parser_dict[reverse_word_dict[word_id_list[idx]]] = [int(item) for item in line.strip('\r\n').split(',')]
+            f.close()
+
+        parser_emb_dict = {}
+        with open(sys.argv[9], 'r') as f:
+            for idx, line in enumerate(f):
+                # key is word index in dictionary, value is embedding vector
+                parser_emb_dict[idx] = [float(item) for item in line.strip('\r\n').split(',')]
+            f.close()
+        parser_emb_size = len(parser_emb_dict[0])
+
+        dict_desc_dict = {}
+        with open(sys.argv[10], 'r') as f:
+            for idx, line in enumerate(f):
+                if reverse_word_dict[word_id_list[idx]] not in dict_desc_dict:
+                    dict_desc_dict[reverse_word_dict[word_id_list[idx]]] = [int(item) for item in line.strip('\r\n').split(',')]
+            f.close()
+
+        kb_dict = {}
+        with open(sys.argv[11], 'r') as f:
+            for idx, line in enumerate(f):
+                if reverse_word_dict[word_id_list[idx]] not in kb_dict:
+                    kb_dict[reverse_word_dict[word_id_list[idx]]] = [int(item) for item in line.strip('\r\n').split(',')]
+            f.close()
+
+        kb_emb_dict = {}
+        with open(sys.argv[12], 'r') as f:
+            for idx, line in enumerate(f):
+                # key is word index in dictionary, value is embedding vector
+                kb_emb_dict[idx] = [float(item) for item in line.strip('\r\n').split(',')]
+            f.close()
+        kb_emb_size = len(kb_emb_dict[0])
+
+        WORD_SEPARATOR = '_'
+        index_dict = {}
+        pred_score_dict = {}
+        with open(sys.argv[13], 'r') as f:
+            counter = 0
+            real_counter = 0
+            for idx, line in enumerate(f):
+                real_counter += 1
+                elements = line.strip('\r\n').split('\t')
+                word_1 = elements[0]
+                word_2 = elements[1]
+                score = float(elements[2])
+                if use_other_info == 'false':
+                    if word_1 not in word_dict or word_2 not in word_dict:
                         continue
-                    elements = line.strip('\r\n').split(',')
-                    word_1 = elements[0]
-                    word_2 = elements[1]
-                    score = float(elements[2])
-                    word_pair_dict[word_1 + WORD_SEPARATOR + word_2] = score
-                    if word_1 in word_dict and word_2 in word_dict:
-                        pred_score_dict[counter] = cosin_distance(word_emb_list[word_dict[word_1]],
-                                                                  word_emb_list[word_dict[word_2]])
-                        index_dict[counter] = score
-                        counter += 1
-                    real_counter += 1
-                f.close()
-            sorted_x = sorted(index_dict.items(), key=operator.itemgetter(1))
-            real_value_list = []
-            for k, v in sorted_x:
-                real_value_list.append(k)
-            sorted_x = sorted(pred_score_dict.items(), key=operator.itemgetter(1))
-            pred_value_list = []
-            for k, v in sorted_x:
-                pred_value_list.append(k)
-            print(stats.pearsonr(real_value_list, pred_value_list)[0])
-
+                    pred_score_dict[counter] = cosin_distance(word_emb_dict[word_dict[word_1]],
+                                                              word_emb_dict[word_dict[word_2]])
+                    index_dict[counter] = score
+                    counter += 1
+                else:
+                    sim_vec1, sim_vec2 = extract_features(use_other_info, word_1, word_2, word_dict, word_emb_dict,
+                                                            pos_dict, pos_emb_dict, parser_dict, parser_emb_dict,
+                                                            dict_desc_dict, kb_dict, kb_emb_dict)
+                    if sim_vec1 == None or sim_vec2 == None:
+                        continue
+                    pred_score_dict[counter] = cosin_distance(sim_vec1, sim_vec2)
+                    index_dict[counter] = score
+                    counter += 1
+            f.close()
+        print("counter is %d, real_counter is %d" % (counter, real_counter))
+        sorted_x = sorted(index_dict.items(), key=operator.itemgetter(1))
+        real_value_list = []
+        for k,v in sorted_x:
+            real_value_list.append(k)
+        sorted_x = sorted(pred_score_dict.items(), key=operator.itemgetter(1))
+        pred_value_list = []
+        for k,v in sorted_x:
+            pred_value_list.append(k)
+        print("{0:.6f}".format(stats.pearsonr(real_value_list, pred_value_list)[0]))
+    # Gensim word2vec function, not support other information
     elif sys.argv[1].lower() == "w2v":
         model = gensim.models.Word2Vec.load(sys.argv[2])
-        if sys.argv[4].lower() == 'men':
-            # MEN dataset: MEN_dataset_natural_form_full/MEN_dataset_lemma_form_full
-            WORD_SEPARATOR = '_'
-            word_pair_dict = {}
-            index_dict = {}
-            pred_score_dict = {}
-            with open(sys.argv[5], 'r') as f:
-                counter = 0
-                real_counter = 0
-                for idx, line in enumerate(f):
-                    elements = line.strip('\r\n').split(' ')
-                    word_1 = elements[0].split('-')[0]
-                    word_2 = elements[1].split('-')[0]
-                    score = float(elements[2])
-                    word_pair_dict[word_1 + WORD_SEPARATOR + word_2] = score
-                    if word_1 in model and word_2 in model:
-                        pred_score_dict[counter] = cosin_distance(model[word_1],
-                                                                  model[word_2])
-                        index_dict[counter] = score
-                        counter += 1
-                    real_counter += 1
-                f.close()
-            sorted_x = sorted(index_dict.items(), key=operator.itemgetter(1))
-            real_value_list = []
-            for k,v in sorted_x:
-                real_value_list.append(k)
-            sorted_x = sorted(pred_score_dict.items(), key=operator.itemgetter(1))
-            pred_value_list = []
-            for k,v in sorted_x:
-                pred_value_list.append(k)
-            print(stats.pearsonr(real_value_list, pred_value_list)[0])
-
-        if sys.argv[4].lower() == 'wordsim353':
-            # WordSim353 dataset: combined.csv
-            WORD_SEPARATOR = '_'
-            word_pair_dict = {}
-            index_dict = {}
-            pred_score_dict = {}
-            with open(sys.argv[5], 'r') as f:
-                counter = 0
-                real_counter = 0
-                for idx, line in enumerate(f):
-                    if idx == 0:
-                        continue
-                    elements = line.strip('\r\n').split(',')
-                    word_1 = elements[0]
-                    word_2 = elements[1]
-                    score = float(elements[2])
-                    word_pair_dict[word_1 + WORD_SEPARATOR + word_2] = score
-                    if word_1 in model and word_2 in model:
-                        pred_score_dict[counter] = cosin_distance(model[word_1],
-                                                                  model[word_2])
-                        index_dict[counter] = score
-                        counter += 1
-                    real_counter += 1
-                f.close()
-            sorted_x = sorted(index_dict.items(), key=operator.itemgetter(1))
-            real_value_list = []
-            for k, v in sorted_x:
-                real_value_list.append(k)
-            sorted_x = sorted(pred_score_dict.items(), key=operator.itemgetter(1))
-            pred_value_list = []
-            for k, v in sorted_x:
-                pred_value_list.append(k)
-            print(stats.pearsonr(real_value_list, pred_value_list)[0])
+        index_dict = {}
+        pred_score_dict = {}
+        with open(sys.argv[13], 'r') as f:
+            counter = 0
+            real_counter = 0
+            for idx, line in enumerate(f):
+                real_counter += 1
+                elements = line.strip('\r\n').split('\t')
+                word_1 = elements[0]
+                word_2 = elements[1]
+                score = float(elements[2])
+                if word_1 not in model or word_2 not in model:
+                    continue
+                pred_score_dict[counter] = cosin_distance(model[word_1],
+                                                          model[word_2])
+                index_dict[counter] = score
+                counter += 1
+            f.close()
+        print("counter is %d, real_counter is %d" % (counter, real_counter))
+        sorted_x = sorted(index_dict.items(), key=operator.itemgetter(1))
+        real_value_list = []
+        for k,v in sorted_x:
+            real_value_list.append(k)
+        sorted_x = sorted(pred_score_dict.items(), key=operator.itemgetter(1))
+        pred_value_list = []
+        for k,v in sorted_x:
+            pred_value_list.append(k)
+        print("{0:.6f}".format(stats.pearsonr(real_value_list, pred_value_list)[0]))

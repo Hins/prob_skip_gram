@@ -24,8 +24,8 @@ if __name__ == '__main__':
     sentences = []
     input_file = open(sys.argv[2], 'r')
     for line in input_file:
-        sentences.append([item for item in [item.replace('\n', '') for item in line.split(' ')]])
+        sentences.append([item for item in line.strip('\r\n').split(' ')])
     input_file.close()
 
-    model = gensim.models.Word2Vec(sentences, min_count=1, size=128, window=4, iter=15, negative=5, sample=1e-4)
+    model = gensim.models.Word2Vec(sentences, min_count=1, size=128, window=4, iter=15, negative=5, sample=1e-4, sg=0)
     model.save(sys.argv[3])
