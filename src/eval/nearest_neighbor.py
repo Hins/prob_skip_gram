@@ -95,21 +95,20 @@ if __name__ == "__main__":
         for k,v in word_dict.items():
             sim_dict = {}
             for kn, vn in word_dict_copy.items():
-                if k != kn:
-                    sim_vec1, sim_vec2 = extract_features(use_other_info, k, kn, word_dict, word_emb_dict, pos_dict,
-                                                          pos_emb_dict, parser_dict, parser_emb_dict, dict_desc_dict,
-                                                          kb_dict, kb_emb_dict)
-                    if sim_vec1 == None or sim_vec2 == None:
-                        continue
-                    sim_dict[kn] = cosin_distance(sim_vec1, sim_vec2)
+                if k == kn:
+                    continue
+                sim_vec1, sim_vec2 = extract_features(use_other_info, k, kn, word_dict, word_emb_dict, pos_dict,
+                                                      pos_emb_dict, parser_dict, parser_emb_dict, dict_desc_dict,
+                                                      kb_dict, kb_emb_dict)
+                if sim_vec1 == None or sim_vec2 == None:
+                    continue
+                sim_dict[kn] = cosin_distance(sim_vec1, sim_vec2)
             sim_key_list = sorted(sim_dict, key=sim_dict.get, reverse=True)
             rtn_list = []
             for idx, key in enumerate(sim_key_list):
                 if idx > 2:
                     break
                 rtn_list.append(key)
-                print(sim_dict[key])
-                print("over here")
             output_file.write(k + " : " + ",".join(rtn_list) + "\n")
             output_file.flush()
     # just use word vector to get most similarity terms
