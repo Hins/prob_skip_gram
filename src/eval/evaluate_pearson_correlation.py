@@ -40,7 +40,6 @@ if __name__ == "__main__":
                 # key is word index in dictionary, value is embedding vector
                 word_emb_dict[idx] = [float(item) for item in line.strip('\r\n').split(',')]
             f.close()
-        word_emb_size = len(word_emb_dict[0])
 
         word_dict = {}
         reverse_word_dict = {}
@@ -89,7 +88,6 @@ if __name__ == "__main__":
                 # key is word index in dictionary, value is embedding vector
                 parser_emb_dict[idx] = [float(item) for item in line.strip('\r\n').split(',')]
             f.close()
-        parser_emb_size = len(parser_emb_dict[0])
 
         dict_desc_dict = {}
         with open(sys.argv[10], 'r') as f:
@@ -111,7 +109,6 @@ if __name__ == "__main__":
                 # key is word index in dictionary, value is embedding vector
                 kb_emb_dict[idx] = [float(item) for item in line.strip('\r\n').split(',')]
             f.close()
-        kb_emb_size = len(kb_emb_dict[0])
 
         WORD_SEPARATOR = '_'
         index_dict = {}
