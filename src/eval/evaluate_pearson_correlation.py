@@ -130,10 +130,15 @@ if __name__ == "__main__":
                     index_dict[counter] = score
                     counter += 1
                 else:
-                    sim_vec1, sim_vec2 = extract_features(use_other_info, word_1, word_2, word_dict, word_emb_dict,
+                    sim_vec1 = extract_features(use_other_info, word_1, word_dict, word_emb_dict,
                                                             pos_dict, pos_emb_dict, parser_dict, parser_emb_dict,
                                                             dict_desc_dict, kb_dict, kb_emb_dict)
-                    if sim_vec1 == None or sim_vec2 == None:
+                    if sim_vec1 == None:
+                        continue
+                    sim_vec2 = extract_features(use_other_info, word_2, word_dict, word_emb_dict,
+                                                pos_dict, pos_emb_dict, parser_dict, parser_emb_dict,
+                                                dict_desc_dict, kb_dict, kb_emb_dict)
+                    if sim_vec2 == None:
                         continue
                     pred_score_dict[counter] = cosin_distance(sim_vec1, sim_vec2)
                     index_dict[counter] = score

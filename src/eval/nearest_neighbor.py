@@ -3,7 +3,6 @@
 # @Author      : panxiaotong
 # @Description : evaluate by nearest neighbor, qualitative evaluation
 
-from collections import OrderedDict
 import sys
 import gensim
 
@@ -97,10 +96,15 @@ if __name__ == "__main__":
             for kn, vn in word_dict_copy.items():
                 if k == kn:
                     continue
-                sim_vec1, sim_vec2 = extract_features(use_other_info, k, kn, word_dict, word_emb_dict, pos_dict,
+                sim_vec1 = extract_features(use_other_info, k, word_dict, word_emb_dict, pos_dict,
                                                       pos_emb_dict, parser_dict, parser_emb_dict, dict_desc_dict,
                                                       kb_dict, kb_emb_dict)
-                if sim_vec1 == None or sim_vec2 == None:
+                if sim_vec1 == None:
+                    continue
+                sim_vec2 = extract_features(use_other_info, kn, word_dict, word_emb_dict, pos_dict,
+                                                      pos_emb_dict, parser_dict, parser_emb_dict, dict_desc_dict,
+                                                      kb_dict, kb_emb_dict)
+                if sim_vec2 == None:
                     continue
                 sim_dict[kn] = cosin_distance(sim_vec1, sim_vec2)
             sim_key_list = sorted(sim_dict, key=sim_dict.get, reverse=True)
