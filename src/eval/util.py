@@ -42,7 +42,7 @@ def extract_features(use_other_info,
         :param kb_dict:
         :param kb_emb_dict:
         :return:
-        """
+    """
     info_list = use_other_info.split(',')
     sim_vec = []
     word_emb_size = len(word_emb_dict[0])

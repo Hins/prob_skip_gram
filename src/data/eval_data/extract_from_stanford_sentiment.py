@@ -6,8 +6,12 @@
 import sys
 
 if __name__ == "__main__":
+    """
+        :param input_file: dictionary.txt
+        :param score_file: sentiment_labels.txt
+    """
     if len(sys.argv) < 5:
-        print("extract_sentiment_analysis_samples <input file> <word dict> <score file> <output file>")
+        print("extract_sentiment_analysis_samples <input_file> <word_dict> <score_file> <output_file>")
         sys.exit()
 
     word_dict = {}
@@ -42,12 +46,7 @@ if __name__ == "__main__":
                     id_list.append(word_dict[token])
                 else:
                     id_list.append("0")
-            flag = False
-            for i in id_list:
-                if i != "0":
-                    flag = True
-                    break
-            if flag == True:
-                output_file.write(','.join(id_list) + "|" + str(score_dict[id]) + "\n")
+            if id_list.count("0") != len(id_list):
+                output_file.write(','.join(id_list) + "\t" + str(score_dict[id]) + "\n")
         f.close()
     output_file.close()

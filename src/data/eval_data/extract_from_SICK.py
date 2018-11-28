@@ -7,8 +7,8 @@ import sys
 
 if __name__ == "__main__":
     if len(sys.argv) < 7:
-        print("extract_entailment_samples <input file> <word dict> <output file1> <output file2>"
-              "<output single class dict> <output complex class dict>")
+        print("extract_entailment_samples <input file> <word dict> <output file1> <output file2> "
+              "<output dict file1> <output dict file2>")
         sys.exit()
 
     word_dict = {}
@@ -34,12 +34,7 @@ if __name__ == "__main__":
                     id1_list.append(word_dict[word])
                 else:
                     id1_list.append("0")
-            flag = False
-            for id in id1_list:
-                if id != "0":
-                    flag = True
-                    break
-            if flag == False:
+            if id1_list.count("0") == len(id1_list):
                 continue
             sent2 = [item for item in elements[2].split(' ') if item.strip() != ""]
             id2_list = []
@@ -48,26 +43,21 @@ if __name__ == "__main__":
                     id2_list.append(word_dict[word])
                 else:
                     id2_list.append("0")
-            flag = False
-            for id in id2_list:
-                if id != "0":
-                    flag = True
-                    break
-            if flag == False:
+            if id2_list.count("0") == len(id2_list):
                 continue
             class_single = elements[3]
             if class_single not in single_class_dict:
                 single_class_dict[class_single] = len(single_class_dict)
-            score = elements[4]
+            # score = elements[4]
             output_single.write(",".join(id1_list) + "\t" + ",".join(id2_list) +
-                                "\t" + score + "\t" + str(single_class_dict[class_single]) + "\n")
+                                "\t" + str(single_class_dict[class_single]) + "\n")
             sub_class1_single = elements[5]
             sub_class2_single = elements[6]
             total_class = sub_class1_single + "&" + sub_class2_single
             if total_class not in complex_class_dict:
                 complex_class_dict[total_class] = len(complex_class_dict)
             output_complex.write(",".join(id1_list) + "\t" + ",".join(id2_list) +
-                                 "\t" + score + "\t" + str(complex_class_dict[total_class]) + "\n")
+                                 "\t" + str(complex_class_dict[total_class]) + "\n")
         f.close()
 
     output_single.close()
