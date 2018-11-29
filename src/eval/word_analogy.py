@@ -10,9 +10,9 @@ import gensim
 from util import extract_features, cosin_distance
 
 if __name__ == "__main__":
-    if len(sys.argv) < 14:
+    if len(sys.argv) < 15:
         print("word_analogy <input file> <word_emb_type> <word_emb> <word_dict> <use_other_info> <word_ids> "
-              "<pos_ids> <pos_emb> <parser_ids> <parser_emb> <dict_desc_ids> <kb_ids> <kb_emb>")
+              "<pos_ids> <pos_emb> <parser_ids> <parser_emb> <dict_desc_ids> <kb_ids> <kb_emb> <sample_size>")
         sys.exit()
 
     analogy_list = []
@@ -20,6 +20,8 @@ if __name__ == "__main__":
         for line in f:
             analogy_list.append(line.strip('\r\n').split('\t'))
         f.close()
+
+    compare_random_size = int(sys.argv[14])
 
     if sys.argv[2].lower() == "file":
         word_emb_dict = {}
@@ -99,11 +101,15 @@ if __name__ == "__main__":
 
         new_feature_dict = {}
         for k,v in word_dict.items():
-            new_feature_dict[k] = extract_features(use_other_info, k, word_dict, word_emb_dict, pos_dict,
+            features = extract_features(use_other_info, k, word_dict, word_emb_dict, pos_dict,
                                       pos_emb_dict, parser_dict, parser_emb_dict, dict_desc_dict,
                                       kb_dict, kb_emb_dict)
-            if new_feature_dict[k] is None:
-                print("%s feature extraction failed" % k)
+            if features is not None:
+                new_feature_dict[k] = features
+            else:
+                sys.stderr.write("%s feature extraction failed" % k)
+
+        print(len(new_feature_dict))
 
         counter = 0
         real_counter = 0
@@ -141,21 +147,30 @@ if __name__ == "__main__":
             real_counter += 1
             new_vec = np.subtract(np.asarray(c_vec, dtype=np.float32),
                 np.subtract(np.asarray(a_vec, dtype=np.float32), np.asarray(b_vec, dtype=np.float32)))
+
+            # [TODO] put random sampling to another script to make prediction align
+            sample_ids = np.random.randint(low=0, high=len(word_dict), size=compare_random_size + 1)
+            sample_ids[compare_random_size] = word_dict[com_item[3]]
             score_dict = {}
-            for k,v in new_feature_dict.items():
-                score_dict[k] = cosin_distance(new_vec.tolist(), v)
+            for idx in range(sample_ids.shape[0]):
+                if sample_ids[idx] in reverse_word_dict and \
+                    reverse_word_dict[sample_ids[idx]] in new_feature_dict:
+                    score_dict[reverse_word_dict[sample_ids[idx]]] = cosin_distance(new_vec.tolist(),
+                                                                                new_feature_dict[reverse_word_dict[sample_ids[idx]]])
             sim_key_list = sorted(score_dict, key=score_dict.get, reverse=True)
             for idx, key in enumerate(sim_key_list):
                 if idx == 0 and key == com_item[3]:
                     top_1 += 1
+                    top_3 += 1
                     break
                 if key == com_item[3]:
                     top_3 += 1
+                    break
                 if idx > 2:
                     break
         if real_counter > 0:
             top_1 = float(top_1) / float(real_counter)
-            top_3 = float(top_3) / float(top_3)
+            top_3 = float(top_3) / float(real_counter)
         else:
             top_1 = 0.0
             top_3 = 0.0
@@ -163,6 +178,12 @@ if __name__ == "__main__":
               (counter, real_counter, float("{0:.3f}".format(top_1)), float("{0:.3f}".format(top_3))))
     elif sys.argv[2].lower() == "w2v":
         model = gensim.models.Word2Vec.load(sys.argv[3])
+        word_dict = {}
+        reverse_word_dict = {}
+        for k,v in model.wv.vocab.items():
+            word_dict[k] = v.index
+            reverse_word_dict[v.index] = k
+        print("word_dict len is %d" % len(word_dict))
         counter = 0
         real_counter = 0
         top_1 = 0
@@ -175,24 +196,29 @@ if __name__ == "__main__":
                 com_item[3] not in model:
                 continue
             real_counter += 1
-            new_vec = np.subtract(np.asarray(model[com_item[2]], dtype=np.float32),
-                                  np.subtract(np.asarray(model[com_item[0]], dtype=np.float32), dtype=np.float32),
-                                              np.asarray(model[com_item[1]], dtype=np.float32))
+            new_vec = np.subtract(model[com_item[2]], np.subtract(model[com_item[0]], model[com_item[1]]))
+
+            # [TODO] put random sampling to another script to make prediction align
+            sample_ids = np.random.randint(low=0, high=len(word_dict), size=compare_random_size + 1)
+            sample_ids[compare_random_size] = word_dict[com_item[3]]
             score_dict = {}
-            for k,v in model.wv.vocab.item():
-                score_dict[k] = cosin_distance(new_vec.tolist(), model[k])
+            for idx in range(sample_ids.shape[0]):
+                score_dict[reverse_word_dict[sample_ids[idx]]] = cosin_distance(new_vec.tolist(),
+                                                                    model[reverse_word_dict[sample_ids[idx]]])
             sim_key_list = sorted(score_dict, key=score_dict.get, reverse=True)
             for idx, key in enumerate(sim_key_list):
                 if idx == 0 and key == com_item[3]:
                     top_1 += 1
+                    top_3 += 1
                     break
                 if key == com_item[3]:
                     top_3 += 1
+                    break
                 if idx > 2:
                     break
         if real_counter > 0:
             top_1 = float(top_1) / float(real_counter)
-            top_3 = float(top_3) / float(top_3)
+            top_3 = float(top_3) / float(real_counter)
         else:
             top_1 = 0.0
             top_3 = 0.0

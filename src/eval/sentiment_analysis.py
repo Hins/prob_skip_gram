@@ -60,7 +60,7 @@ class sentimentModel():
                 cell = rnn.BasicLSTMCell(cfg.dict_lstm_hidden_size, name="dict_rnn")
                 init_state = cell.zero_state(cfg.batch_size, dtype=tf.float32)
                 _, rnn_final_state = tf.nn.dynamic_rnn(cell=cell, inputs=sampled,
-                                                                             initial_state=init_state, time_major=False)
+                                                     initial_state=init_state, time_major=False)
                 self.logit_w = tf.get_variable(
                     'logit_w',
                     shape=(cfg.dict_lstm_hidden_size, 1),
