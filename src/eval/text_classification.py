@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # @Time        : 2018/11/22 15:50
 # @Author      : panxiaotong
-# @Description : MIPSG-I/MIPSG-II model, address sentiment analysis problems
+# @Description : MIPSG-I/MIPSG-II model, text classification
 
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
@@ -9,19 +9,20 @@ import sys
 sys.path.append("..")
 import tensorflow as tf
 from tensorflow.contrib import rnn
-from util.config import cfg
+from config.config import cfg
 import numpy as np
+import gensim
 
 target_list = []
 emb_list = []
 labels = []
 word_dictionary_size = 0
-def load_sample(input_file, word_emb_file):
+def load_sample(input_file, word_emb_type, word_emb_file, label_type, num_classes):
     global target_list, emb_list, labels, word_dictionary_size
 
     with open(input_file, 'r') as f:
         for line in f:
-            elements = line.strip('\r\n').split('|')
+            elements = line.strip('\r\n').split('\t')
             tmp_list = elements[0].split(',')
             if len(tmp_list) > cfg.dict_time_step:
                 tmp_list = tmp_list[0:cfg.dict_time_step]
@@ -30,24 +31,38 @@ def load_sample(input_file, word_emb_file):
                 for i in range(num):
                     tmp_list.append("0")
             target_list.append(tmp_list)
-            labels.append(float(elements[1]))
+            label_array = np.zeros(shape=[num_classes], dtype=np.int32)
+            if label_type == 'int':
+                label_array[int(elements[1])] = 1
+            elif label_array == 'float':
+                label_array[np.round(float(num_classes) * float(elements[1]))] = 1
+            labels.append(label_array)
         f.close()
 
-    with open(word_emb_file, 'r') as f:
-        for idx, line in enumerate(f):
-            emb_list.append([float(item) for item in line.strip('\r\n').split(',')])
-        word_dictionary_size = idx + 1
-        f.close()
+    if word_emb_type == 'file':
+        with open(word_emb_file, 'r') as f:
+            for idx, line in enumerate(f):
+                emb_list.append([float(item) for item in line.strip('\r\n').split(',')])
+            word_dictionary_size = idx + 1
+            f.close()
+    elif word_emb_type == 'w2v':
+        model = gensim.models.Word2Vec.load(sys.argv[3])
+        word_dict = {}
+        for k, v in model.wv.vocab.items():
+            word_dict[k] = v.index
+        sorted_list = sorted(word_dict, key=word_dict.get)
+        for word in sorted_list:
+            emb_list.append([float(item) for item in model[word]])
 
     target_list = np.asarray(target_list, dtype=np.int32)
     emb_list = np.asarray(emb_list, dtype=np.float32)
-    labels = np.asarray(labels, dtype=np.float32)
+    labels = np.asarray(labels, dtype=np.int32)
 
-class sentimentModel():
-    def __init__(self, sess, train_method):
+class textClassificationModel():
+    def __init__(self, sess, train_method, num_classes):
         self.word_emb = tf.placeholder(shape=[word_dictionary_size, cfg.word_embedding_size], dtype=tf.float32)
         self.sentence = tf.placeholder(shape=[cfg.batch_size, cfg.dict_time_step], dtype=tf.int32)
-        self.label = tf.placeholder(shape=[cfg.batch_size], dtype=tf.float32)
+        self.label = tf.placeholder(shape=[cfg.batch_size, num_classes], dtype=tf.float32)
         self.sess = sess
 
         with tf.device('/gpu:1'):
@@ -63,21 +78,22 @@ class sentimentModel():
                                                      initial_state=init_state, time_major=False)
                 self.logit_w = tf.get_variable(
                     'logit_w',
-                    shape=(cfg.dict_lstm_hidden_size, 1),
+                    shape=(cfg.dict_lstm_hidden_size, num_classes),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.logit_b = tf.get_variable(
                     'logit_b',
-                    shape=(1),
+                    shape=(num_classes),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 x = tf.squeeze(tf.nn.bias_add(tf.matmul(rnn_final_state.h, self.logit_w), self.logit_b))
-                self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=self.label))
+                self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=x, labels=self.label))
                 self.opt = tf.train.AdamOptimizer().minimize(self.loss)
 
-                self.prediction = tf.nn.sigmoid(x)
+                self.accuracy = tf.reduce_mean(tf.cast(
+                    tf.equal(tf.argmax(x, 1), tf.argmax(self.label, 1)), dtype=tf.float32))
             elif train_method == 'cnn':
                 self.filter_layer = tf.get_variable(
                     'filter',
@@ -96,21 +112,23 @@ class sentimentModel():
 
                 self.logit_w = tf.get_variable(
                     'logit_w',
-                    shape=(pool_layer.get_shape()[1], 1),
+                    shape=(pool_layer.get_shape()[1], num_classes),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.logit_b = tf.get_variable(
                     'logit_b',
-                    shape=(1),
+                    shape=(num_classes),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
 
                 x = tf.squeeze(tf.nn.bias_add(tf.matmul(pool_layer, self.logit_w), self.logit_b))
-                self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=self.label))
+                self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=x, labels=self.label))
                 self.opt = tf.train.AdamOptimizer().minimize(self.loss)
-                self.prediction = tf.nn.sigmoid(x)
+
+                self.accuracy = tf.reduce_mean(tf.cast(
+                    tf.equal(tf.argmax(x, 1), tf.argmax(self.label, 1)), dtype=tf.float32))
 
             self.merged = tf.summary.merge_all()
 
@@ -129,18 +147,19 @@ class sentimentModel():
             self.label: label
         })
 
-    def validate(self, word_emb, sentence):
-        return self.sess.run([self.prediction], feed_dict={
+    def validate(self, word_emb, sentence, label):
+        return self.sess.run([self.accuracy], feed_dict={
             self.word_emb: word_emb,
-            self.sentence: sentence
+            self.sentence: sentence,
+            self.label: label
         })
 
 if __name__ == '__main__':
-    if len(sys.argv) < 4:
-        print("skipgram <input> <word emb> <train_method>")
+    if len(sys.argv) < 7:
+        print("text_classification <input> <word_emb_type> <word emb> <label type> <train_method> <num_classes>")
         sys.exit()
 
-    load_sample(sys.argv[1], sys.argv[2])
+    load_sample(sys.argv[1], sys.argv[2].lower(), sys.argv[3], sys.argv[4].lower(), int(sys.argv[6]))
     total_sample_size = target_list.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
@@ -152,7 +171,7 @@ if __name__ == '__main__':
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
-        sentimentObj = sentimentModel(sess, sys.argv[3].lower())
+        sentimentObj = textClassificationModel(sess, sys.argv[5].lower(), int(sys.argv[6]))
         tf.global_variables_initializer().run()
 
         variables_names = [v.name for v in tf.trainable_variables()]
@@ -161,6 +180,11 @@ if __name__ == '__main__':
             print(k)
 
         trainable = False
+        max_accuracy = -1.0
+        prev_avg_accu = 0.0
+        cur_avg_accu = 0.0
+        prev_loss = 0.0
+        cur_loss = 0.0
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
             for i in range(train_set_size_fake):
@@ -176,13 +200,30 @@ if __name__ == '__main__':
             accuracy = 0.0
             for j in range(total_batch_size - train_set_size):
                 k = j + train_set_size
-                predict_result = sentimentObj.validate(emb_list,
-                                                  target_list[k * cfg.batch_size:(k + 1) * cfg.batch_size])
-                row_size = len(predict_result)
-                correct_num = 0
-                for idx in range(row_size):
-                    if int(predict_result[idx][0] * 5.0) == int(labels[k * cfg.batch_size + idx] * 5.0):
-                        correct_num += 1
-                accuracy += float(correct_num) / float(cfg.batch_size)
+                iter_accuracy = sentimentObj.validate(emb_list,
+                                                      target_list[k * cfg.batch_size:(k + 1) * cfg.batch_size],
+                                                      labels[k * cfg.batch_size:(k + 1) * cfg.batch_size])
+                accuracy += iter_accuracy[0]
+                if max_accuracy < iter_accuracy[0]:
+                    max_accuracy = iter_accuracy[0]
+
+            if epoch_index < cfg.early_stop_iter:
+                prev_avg_accu += accuracy
+                prev_loss += loss_sum
+            elif epoch_index % cfg.early_stop_iter == 0 and epoch_index / cfg.early_stop_iter > 1:
+                if cur_avg_accu <= prev_avg_accu and prev_loss <= cur_loss:
+                    print("training converge in epoch %d: prev_accu %f, cur_accu %f, prev_loss %f, cur_loss %f" %
+                          (epoch_index, prev_avg_accu, cur_avg_accu, prev_loss, cur_loss))
+                    break
+                else:
+                    prev_avg_accu = cur_avg_accu
+                    cur_avg_accu = accuracy
+                    prev_loss = cur_loss
+                    cur_loss = loss_sum
+            else:
+                cur_avg_accu += accuracy
+                cur_loss += loss_sum
+
             print("epoch_index %d : accuracy %f" % (epoch_index, accuracy / (total_batch_size - train_set_size)))
+        print('max_accuracy is %f' % float("{0:.3f}".format(max_accuracy)))
         sess.close()

@@ -4,7 +4,7 @@
 # @Description : MIPSG-I/MIPSG-II model, address entailment classification problems
 
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import sys
 sys.path.append("..")
 import tensorflow as tf
@@ -198,6 +198,7 @@ if __name__ == '__main__':
         for k, v in zip(variables_names, values):
             print(k)
 
+        max_accuracy = -1.0
         trainable = False
         for pos_label in label_category_list:
             pos_label = int(pos_label)
@@ -227,5 +228,7 @@ if __name__ == '__main__':
                                                            sent2_list[k * cfg.batch_size:(k + 1) * cfg.batch_size],
                                                            new_label[k * cfg.batch_size:(k + 1) * cfg.batch_size])
                     accuracy += item_accuracy
+                    if item_accuracy > max_accuracy:
+                        max_accuracy = item_accuracy
                 print("epoch_index %d : accuracy %f" % (epoch_index, accuracy / (total_batch_size - train_set_size)))
         sess.close()
