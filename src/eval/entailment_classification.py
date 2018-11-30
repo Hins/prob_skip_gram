@@ -9,8 +9,9 @@ import sys
 sys.path.append("..")
 import tensorflow as tf
 from tensorflow.contrib import rnn
-from util.config import cfg
+from config.config import cfg
 import numpy as np
+import gensim
 
 sent1_list = []
 sent2_list = []
@@ -19,7 +20,7 @@ labels = []
 label_category_list = []
 sample_list = []
 word_dictionary_size = 0
-def load_sample(input_file, word_emb_file):
+def load_sample(input_file, word_emb_type, word_emb_file, num_classes):
     global sent1_list, sent2_list, emb_list, labels, word_dictionary_size
 
     with open(input_file, 'r') as f:
@@ -41,17 +42,28 @@ def load_sample(input_file, word_emb_file):
                 for i in range(num):
                     tmp_list.append("0")
             sent2_list.append(tmp_list)
-            label = elements[3]
-            labels.append(label)
-            if label not in label_category_list:
-                label_category_list.append(label)
+            np_label = np.zeros(shape=[num_classes], dtype=np.float32)
+            np_label[int(elements[2])] = 1
+            labels.append(np_label)
+            if int(elements[2]) not in label_category_list:
+                label_category_list.append(int(elements[2]))
         f.close()
 
-    with open(word_emb_file, 'r') as f:
-        for idx, line in enumerate(f):
-            emb_list.append([float(item) for item in line.strip('\r\n').split(',')])
-        word_dictionary_size = idx + 1
-        f.close()
+    if word_emb_type == 'file':
+        with open(word_emb_file, 'r') as f:
+            for idx, line in enumerate(f):
+                emb_list.append([float(item) for item in line.strip('\r\n').split(',')])
+            word_dictionary_size = idx + 1
+            f.close()
+    elif word_emb_type == 'w2v':
+        model = gensim.models.Word2Vec.load(sys.argv[3])
+        word_dict = {}
+        for k, v in model.wv.vocab.items():
+            word_dict[k] = v.index
+        sorted_list = sorted(word_dict, key=word_dict.get)
+        for word in sorted_list:
+            emb_list.append([float(item) for item in model[word]])
+        word_dictionary_size = len(word_dict)
 
     sent1_list = np.asarray(sent1_list, dtype=np.int32)
     sent2_list = np.asarray(sent2_list, dtype=np.int32)
@@ -59,11 +71,11 @@ def load_sample(input_file, word_emb_file):
     labels = np.asarray(labels, dtype=np.float32)
 
 class entailmentModel():
-    def __init__(self, sess, train_method):
+    def __init__(self, sess, train_method, num_classes):
         self.word_emb = tf.placeholder(shape=[word_dictionary_size, cfg.word_embedding_size], dtype=tf.float32)
         self.sent1 = tf.placeholder(shape=[cfg.batch_size, cfg.dict_time_step], dtype=tf.int32)
         self.sent2 = tf.placeholder(shape=[cfg.batch_size, cfg.dict_time_step], dtype=tf.int32)
-        self.label = tf.placeholder(shape=[cfg.batch_size], dtype=tf.float32)
+        self.label = tf.placeholder(shape=[cfg.batch_size, num_classes], dtype=tf.float32)
         self.sess = sess
 
         with tf.device('/gpu:0'):
@@ -93,22 +105,22 @@ class entailmentModel():
                 print("lstm_state shape is %s" % lstm_state.get_shape())
                 self.logit_w = tf.get_variable(
                     'logit_w',
-                    shape=(cfg.dict_lstm_hidden_size * 2, 1),
+                    shape=(cfg.dict_lstm_hidden_size * 2, num_classes),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.logit_b = tf.get_variable(
                     'logit_b',
-                    shape=(1),
+                    shape=(num_classes),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 x = tf.squeeze(tf.nn.bias_add(tf.matmul(lstm_state, self.logit_w), self.logit_b))
-                self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=self.label))
+                self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=x, labels=self.label))
                 self.opt = tf.train.AdamOptimizer().minimize(self.loss)
 
                 self.accuracy = tf.reduce_mean(
-                    tf.cast(tf.equal(tf.round(tf.nn.sigmoid(x)), self.label), tf.float32))
+                    tf.cast(tf.equal(tf.argmax(x, 1), tf.argmax(self.label, 1)), tf.float32))
             elif train_method == 'cnn':
                 sampled = tf.concat([tf.reduce_sum(emb1_list, axis=1),
                                      tf.reduce_sum(emb2_list, axis=1)], axis=1)
@@ -130,22 +142,22 @@ class entailmentModel():
 
                 self.logit_w = tf.get_variable(
                     'logit_w',
-                    shape=(pool_layer.get_shape()[1], 1),
+                    shape=(pool_layer.get_shape()[1], num_classes),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
                 self.logit_b = tf.get_variable(
                     'logit_b',
-                    shape=(1),
+                    shape=(num_classes),
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
 
                 x = tf.squeeze(tf.nn.bias_add(tf.matmul(pool_layer, self.logit_w), self.logit_b))
-                self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=x, labels=self.label))
+                self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=x, labels=self.label))
                 self.opt = tf.train.AdamOptimizer().minimize(self.loss)
                 self.accuracy = tf.reduce_mean(
-                    tf.cast(tf.equal(tf.round(tf.nn.sigmoid(x)), self.label), tf.float32))
+                    tf.cast(tf.equal(tf.argmax(x, 1), tf.argmax(self.label, 1)), tf.float32))
 
             self.merged = tf.summary.merge_all()
 
@@ -174,11 +186,11 @@ class entailmentModel():
         })
 
 if __name__ == '__main__':
-    if len(sys.argv) < 4:
-        print("skipgram <input> <word emb> <train_method>")
+    if len(sys.argv) < 6:
+        print("entailmentModel <input> <word_emb_type> <word emb> <train_method> <num_classes>")
         sys.exit()
 
-    load_sample(sys.argv[1], sys.argv[2])
+    load_sample(sys.argv[1], sys.argv[2].lower(), sys.argv[3], int(sys.argv[5]))
     total_sample_size = sent1_list.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
@@ -190,7 +202,7 @@ if __name__ == '__main__':
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
-        sentimentObj = entailmentModel(sess, sys.argv[3].lower())
+        sentimentObj = entailmentModel(sess, sys.argv[4].lower(), int(sys.argv[5]))
         tf.global_variables_initializer().run()
 
         variables_names = [v.name for v in tf.trainable_variables()]
@@ -198,15 +210,14 @@ if __name__ == '__main__':
         for k, v in zip(variables_names, values):
             print(k)
 
-        max_accuracy = -1.0
         trainable = False
+        max_accuracy = -1.0
+        prev_avg_accu = 0.0
+        cur_avg_accu = 0.0
+        prev_loss = 0.0
+        cur_loss = 0.0
         for pos_label in label_category_list:
             pos_label = int(pos_label)
-            new_label = np.zeros(shape=[total_sample_size], dtype=np.float32)
-            row = labels.shape[0]
-            for idx in range(row):
-                if pos_label == labels[idx]:
-                    new_label[idx] = 1
             for epoch_index in range(cfg.epoch_size):
                 loss_sum = 0.0
                 for i in range(train_set_size_fake):
@@ -216,9 +227,9 @@ if __name__ == '__main__':
                     _, iter_loss = sentimentObj.train(emb_list,
                                                       sent1_list[i * cfg.batch_size:(i+1) * cfg.batch_size],
                                                       sent2_list[i * cfg.batch_size:(i+1) * cfg.batch_size],
-                                                      new_label[i * cfg.batch_size:(i+1) * cfg.batch_size])
+                                                      labels[i * cfg.batch_size:(i+1) * cfg.batch_size])
                     loss_sum += iter_loss
-                print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / cfg.batch_size))
+                print("%d epoch_index %d, loss is %f" % (pos_label, epoch_index, loss_sum / cfg.batch_size))
 
                 accuracy = 0.0
                 for j in range(total_batch_size - train_set_size):
@@ -226,9 +237,27 @@ if __name__ == '__main__':
                     item_accuracy = sentimentObj.validate(emb_list,
                                                            sent1_list[k * cfg.batch_size:(k + 1) * cfg.batch_size],
                                                            sent2_list[k * cfg.batch_size:(k + 1) * cfg.batch_size],
-                                                           new_label[k * cfg.batch_size:(k + 1) * cfg.batch_size])
+                                                           labels[k * cfg.batch_size:(k + 1) * cfg.batch_size])
                     accuracy += item_accuracy
                     if item_accuracy > max_accuracy:
                         max_accuracy = item_accuracy
-                print("epoch_index %d : accuracy %f" % (epoch_index, accuracy / (total_batch_size - train_set_size)))
+                print("%d epoch_index %d : accuracy %f" % (pos_label, epoch_index, accuracy / (total_batch_size - train_set_size)))
+
+            if epoch_index < cfg.early_stop_iter:
+                prev_avg_accu += accuracy
+                prev_loss += loss_sum
+            elif epoch_index % cfg.early_stop_iter == 0 and epoch_index / cfg.early_stop_iter > 1:
+                if cur_avg_accu <= prev_avg_accu and prev_loss <= cur_loss:
+                    print("training converge in epoch %d: prev_accu %f, cur_accu %f, prev_loss %f, cur_loss %f" %
+                          (epoch_index, prev_avg_accu, cur_avg_accu, prev_loss, cur_loss))
+                    break
+                else:
+                    prev_avg_accu = cur_avg_accu
+                    cur_avg_accu = accuracy
+                    prev_loss = cur_loss
+                    cur_loss = loss_sum
+            else:
+                cur_avg_accu += accuracy
+                cur_loss += loss_sum
+        print('max_accuracy is %f' % max_accuracy)
         sess.close()

@@ -53,6 +53,7 @@ def load_sample(input_file, word_emb_type, word_emb_file, label_type, num_classe
         sorted_list = sorted(word_dict, key=word_dict.get)
         for word in sorted_list:
             emb_list.append([float(item) for item in model[word]])
+        word_dictionary_size = len(word_dict)
 
     target_list = np.asarray(target_list, dtype=np.int32)
     emb_list = np.asarray(emb_list, dtype=np.float32)
