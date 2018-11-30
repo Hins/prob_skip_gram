@@ -66,7 +66,7 @@ class entailmentModel():
         self.label = tf.placeholder(shape=[cfg.batch_size], dtype=tf.float32)
         self.sess = sess
 
-        with tf.device('/gpu:1'):
+        with tf.device('/gpu:0'):
             sent1 = tf.split(self.sent1, num_or_size_splits=cfg.batch_size, axis=0)
             sent2 = tf.split(self.sent2, num_or_size_splits=cfg.batch_size, axis=0)
             emb1_list = []
