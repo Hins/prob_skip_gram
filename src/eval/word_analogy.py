@@ -224,3 +224,53 @@ if __name__ == "__main__":
             top_3 = 0.0
         print("counter is %d, real_counter is %d, top_1 precision is %f, top_3 precision is %f" %
               (counter, real_counter, float("{0:.3f}".format(top_1)), float("{0:.3f}".format(top_3))))
+    elif sys.argv[2].lower() == "glove":
+        word_dict = {}
+        reverse_word_dict = {}
+        with open(sys.argv[3], 'r') as f:
+            for idx, line in enumerate(f):
+                elements = line.strip('\r\n').split(' ')
+                word_dict[elements[0]] = [float(item) for idx, item in enumerate(elements) if idx > 0]
+                reverse_word_dict[idx] = elements[0]
+            f.close()
+        counter = 0
+        real_counter = 0
+        top_1 = 0
+        top_3 = 0
+        for com_item in analogy_list:
+            counter += 1
+            if com_item[0] not in word_dict or \
+                    com_item[1] not in word_dict or \
+                    com_item[2] not in word_dict or \
+                    com_item[3] not in word_dict:
+                continue
+            real_counter += 1
+            new_vec = np.subtract(word_dict[com_item[2]], np.subtract(word_dict[com_item[0]], word_dict[com_item[1]]))
+
+            # [TODO] put random sampling to another script to make prediction align
+            sample_ids = np.random.randint(low=0, high=len(word_dict), size=compare_random_size + 1)
+            sample_ids[compare_random_size] = word_dict[com_item[3]]
+            score_dict = {}
+            for idx in range(sample_ids.shape[0]):
+                score_dict[reverse_word_dict[sample_ids[idx]]] = cosin_distance(new_vec.tolist(),
+                                                                                word_dict[
+                                                                                    reverse_word_dict[sample_ids[idx]]])
+            sim_key_list = sorted(score_dict, key=score_dict.get, reverse=True)
+            for idx, key in enumerate(sim_key_list):
+                if idx == 0 and key == com_item[3]:
+                    top_1 += 1
+                    top_3 += 1
+                    break
+                if key == com_item[3]:
+                    top_3 += 1
+                    break
+                if idx > 2:
+                    break
+        if real_counter > 0:
+            top_1 = float(top_1) / float(real_counter)
+            top_3 = float(top_3) / float(real_counter)
+        else:
+            top_1 = 0.0
+            top_3 = 0.0
+        print("counter is %d, real_counter is %d, top_1 precision is %f, top_3 precision is %f" %
+              (counter, real_counter, float("{0:.3f}".format(top_1)), float("{0:.3f}".format(top_3))))

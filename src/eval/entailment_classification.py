@@ -64,6 +64,15 @@ def load_sample(input_file, word_emb_type, word_emb_file, num_classes):
         for word in sorted_list:
             emb_list.append([float(item) for item in model[word]])
         word_dictionary_size = len(word_dict)
+    elif word_emb_type == 'glove':
+        word_dict = {}
+        with open(word_emb_type, 'r') as f:
+            for idx, line in enumerate(f):
+                elements = line.strip('\r\n').split(' ')
+                word_dict[elements[0]] = idx
+                emb_list.append([float(item) for sub_idx, item in enumerate(elements) if sub_idx > 0])
+            f.close()
+        word_dictionary_size = len(word_dict)
 
     sent1_list = np.asarray(sent1_list, dtype=np.int32)
     sent2_list = np.asarray(sent2_list, dtype=np.int32)

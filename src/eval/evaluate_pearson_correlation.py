@@ -185,3 +185,38 @@ if __name__ == "__main__":
         for k,v in sorted_x:
             pred_value_list.append(k)
         print("{0:.6f}".format(stats.pearsonr(real_value_list, pred_value_list)[0]))
+    elif sys.argv[1].lower() == "glove":
+        word_dict = {}
+        with open(sys.argv[3], 'r') as f:
+            for idx, line in enumerate(f):
+                elements = line.strip('\r\n').split(' ')
+                word_dict[elements[0]] = [float(item) for idx, item in enumerate(elements) if idx > 0]
+            f.close()
+        index_dict = {}
+        pred_score_dict = {}
+        with open(sys.argv[13], 'r') as f:
+            counter = 0
+            real_counter = 0
+            for idx, line in enumerate(f):
+                real_counter += 1
+                elements = line.strip('\r\n').split('\t')
+                word_1 = elements[0]
+                word_2 = elements[1]
+                score = float(elements[2])
+                if word_1 not in word_dict or word_2 not in word_dict:
+                    continue
+                pred_score_dict[counter] = cosin_distance(word_dict[word_1],
+                                                          word_dict[word_2])
+                index_dict[counter] = score
+                counter += 1
+            f.close()
+        print("counter is %d, real_counter is %d" % (counter, real_counter))
+        sorted_x = sorted(index_dict.items(), key=operator.itemgetter(1))
+        real_value_list = []
+        for k,v in sorted_x:
+            real_value_list.append(k)
+        sorted_x = sorted(pred_score_dict.items(), key=operator.itemgetter(1))
+        pred_value_list = []
+        for k,v in sorted_x:
+            pred_value_list.append(k)
+        print("{0:.6f}".format(stats.pearsonr(real_value_list, pred_value_list)[0]))

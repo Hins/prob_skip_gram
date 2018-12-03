@@ -3,34 +3,16 @@
 # @Author      : panxiaotong
 # @Description : extract samples
 
-import json
 import sys
 sys.path.append("..")
-from util.config import cfg
+from config.config import cfg
 from stanfordcorenlp import StanfordCoreNLP
 import nltk
 nltk.download('wordnet')
 from nltk.corpus import wordnet as wn
 from pyltp import Parser, Postagger
-import re
-import requests
 import string
 import random
-
-class GooleKGAPI(object):
-    def __init__(self):
-        self.api_key = 'AIzaSyAvXCjcZCh7QRMAgcppheJkfUWktGZQg_M'
-
-    def getResult(self,query):
-        service_url = 'https://kgsearch.googleapis.com/v1/entities:search?key=' + \
-                      self.api_key + '&limit=1&indent=True&query=' + query
-        r = requests.get(url=service_url)
-        response = json.loads(r.text)
-        if "itemListElement" not in response or len(response['itemListElement']) == 0 or \
-            "result" not in response['itemListElement'][0] or "@type" not in response['itemListElement'][0]['result']:
-            print(query)
-            return ""
-        return response['itemListElement'][0]['result']['@type']
 
 if __name__ == "__main__":
     if len(sys.argv) < 16:
@@ -45,15 +27,7 @@ if __name__ == "__main__":
     parser.load(sys.argv[3])
     postagger = Postagger()
     postagger.load(sys.argv[4])
-    WikiData_url = "https://www.wikidata.org/w/api.php?action=wbsearchentities&language=en&search="
-    request_header = {'accept':'application/json'}
-    gkg = GooleKGAPI()
-    '''
-    DBPedia_url = "https://api.dbpedia-spotlight.org/en/annotate?text="
-    DBPedia_header = {'accept':'application/json'}
-    DBPedia_start_str = "Schema:"
-    DBPedia_end_str = ","
-    '''
+
     sub_context_window_size = cfg.context_window_size / 2
 
     word_dict_output = open(sys.argv[5], 'w')
@@ -80,8 +54,8 @@ if __name__ == "__main__":
     wordnet_dict = {}
     WikiData_dict = {}
     punctuation_list = string.punctuation
-    integ_regex = re.compile(r'-?[1-9]\d*')
-    digit_regex = re.compile(r'-?([1-9]\d*\.\d*|0\.\d*[1-9]\d*|0?\.0+|0)$')
+    # integ_regex = re.compile(r'-?[1-9]\d*')
+    # digit_regex = re.compile(r'-?([1-9]\d*\.\d*|0\.\d*[1-9]\d*|0?\.0+|0)$')
     number_str_constant = '<num>'
     with open(sys.argv[1], 'r') as f:
         for line in f:
@@ -89,12 +63,15 @@ if __name__ == "__main__":
                 continue
             line = line.strip('\r\n')
             try:
-                tokenize_list = [str(item) for item in nlp.word_tokenize(line) if str(item) not in punctuation_list]
+                tokenize_list = [item for item in line.split(' ') if item.strip() != '']
+                # tokenize_list = [str(item) for item in nlp.word_tokenize(line) if str(item) not in punctuation_list]
             except:
                 continue
+            '''
             for i in xrange(len(tokenize_list)):
                 if digit_regex.match(tokenize_list[i]) != None or integ_regex.match(tokenize_list[i]) != None:
                     tokenize_list[i] = number_str_constant
+            '''
             tokenize_list_len = len(tokenize_list)
             if tokenize_list_len < 1 + cfg.context_window_size:
                 continue
@@ -177,10 +154,12 @@ if __name__ == "__main__":
                         for word in dict_desc_word_list:
                             if word in punctuation_list:
                                 continue
+                            '''
                             if digit_regex.match(word) != None:
                                 continue
                             if integ_regex.match(word) != None:
                                 continue
+                            '''
                             if word not in word_dict:
                                 word_dict[word] = len(word_dict) + 1
                             dict_desc_word_id_list.append(str(word_dict[word]))
@@ -188,24 +167,6 @@ if __name__ == "__main__":
                         wordnet_dict[cur_word] = dict_desc_word_id_list
                 else:
                     dict_desc_output.write(",".join(wordnet_dict[cur_word]) + "\n")
-
-                '''
-                if cur_word not in kb_entity_content_dict:
-                    kb_list = gkg.getResult(cur_word)
-                    if isinstance(kb_list, str):
-                        kb_entity_output.write("0\n")
-                        kb_entity_content_dict[cur_word] = "0"
-                        continue
-                    kb_list_id = []
-                    for entity in kb_list:
-                        if entity not in kb_entity_dict:
-                            kb_entity_dict[entity] = len(kb_entity_dict) + 1
-                        kb_list_id.append(kb_entity_dict[entity])
-                    kb_entity_content_dict[cur_word] = ",".join([str(item) for item in kb_list_id])
-                    kb_entity_output.write(",".join([str(item) for item in kb_list_id]) + "\n")
-                else:
-                    kb_entity_output.write(kb_entity_content_dict[cur_word] + "\n")
-                '''
                 word_index += 1
         f.close()
 

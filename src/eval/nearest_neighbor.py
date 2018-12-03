@@ -132,4 +132,27 @@ if __name__ == "__main__":
             for item in most_top_n_terms:
                 most_top_n_list.append(item[0])
             output_file.write(word + " : " + ",".join(most_top_n_list) + "\n")
+    elif sys.argv[1].lower() == "glove":
+        word_dict = {}
+        with open(sys.argv[2], 'r') as f:
+            for line in f:
+                elements = line.strip('\r\n').split(' ')
+                word_dict[elements[0]] = [float(item) for idx, item in enumerate(elements) if idx > 0]
+            f.close()
+
+        word_dict_tmp = word_dict.copy()
+        for k,v in word_dict.items():
+            sim_dict = {}
+            for sub_k, sub_v in word_dict_tmp.items():
+                if k == sub_k:
+                    continue
+                sim_dict[sub_k] = cosin_distance(v, sub_v)
+            sim_key_list = sorted(sim_dict, key=sim_dict.get, reverse=True)
+            rtn_list = []
+            for idx, key in enumerate(sim_key_list):
+                if idx > 2:
+                    break
+                rtn_list.append(key)
+            output_file.write(k + " : " + ",".join(rtn_list) + "\n")
+            output_file.flush()
     output_file.close()
