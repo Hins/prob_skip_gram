@@ -14,11 +14,13 @@ import numpy as np
 import gensim
 
 target_list = []
+test_list = []
+test_labels = []
 emb_list = []
 labels = []
 word_dictionary_size = 0
-def load_sample(input_file, word_emb_type, word_emb_file, label_type, num_classes):
-    global target_list, emb_list, labels, word_dictionary_size
+def load_sample(input_file, test_file, word_emb_type, word_emb_file, label_type, num_classes):
+    global target_list, test_list, test_labels, emb_list, labels, word_dictionary_size
 
     with open(input_file, 'r') as f:
         for line in f:
@@ -39,6 +41,26 @@ def load_sample(input_file, word_emb_type, word_emb_file, label_type, num_classe
             labels.append(label_array)
         f.close()
 
+    if test_file.strip() != '':
+        with open(test_file, 'r') as f:
+            for line in f:
+                elements = line.strip('\r\n').split('\t')
+                tmp_list = elements[0].split(',')
+                if len(tmp_list) > cfg.dict_time_step:
+                    tmp_list = tmp_list[0:cfg.dict_time_step]
+                else:
+                    num = cfg.dict_time_step - len(tmp_list)
+                    for i in range(num):
+                        tmp_list.append("0")
+                test_list.append(tmp_list)
+                label_array = np.zeros(shape=[num_classes], dtype=np.int32)
+                if label_type == 'int':
+                    label_array[int(elements[1])] = 1
+                elif label_array == 'float':
+                    label_array[np.round(float(num_classes) * float(elements[1]))] = 1
+                test_labels.append(label_array)
+            f.close()
+
     if word_emb_type == 'file':
         with open(word_emb_file, 'r') as f:
             for idx, line in enumerate(f):
@@ -46,7 +68,7 @@ def load_sample(input_file, word_emb_type, word_emb_file, label_type, num_classe
             word_dictionary_size = idx + 1
             f.close()
     elif word_emb_type == 'w2v':
-        model = gensim.models.Word2Vec.load(sys.argv[3])
+        model = gensim.models.Word2Vec.load(word_emb_file)
         word_dict = {}
         for k, v in model.wv.vocab.items():
             word_dict[k] = v.index
@@ -56,7 +78,7 @@ def load_sample(input_file, word_emb_type, word_emb_file, label_type, num_classe
         word_dictionary_size = len(word_dict)
     elif word_emb_type == 'glove':
         word_dict = {}
-        with open(word_emb_type, 'r') as f:
+        with open(word_emb_file, 'r') as f:
             for idx, line in enumerate(f):
                 elements = line.strip('\r\n').split(' ')
                 word_dict[elements[0]] = idx
@@ -65,6 +87,8 @@ def load_sample(input_file, word_emb_type, word_emb_file, label_type, num_classe
         word_dictionary_size = len(word_dict)
 
     target_list = np.asarray(target_list, dtype=np.int32)
+    test_list = np.asarray(test_list, dtype=np.int32)
+    test_labels = np.asarray(test_labels, dtype=np.int32)
     emb_list = np.asarray(emb_list, dtype=np.float32)
     labels = np.asarray(labels, dtype=np.int32)
 
@@ -165,23 +189,25 @@ class textClassificationModel():
         })
 
 if __name__ == '__main__':
-    if len(sys.argv) < 7:
-        print("text_classification <input> <word_emb_type> <word emb> <label type> <train_method> <num_classes>")
+    if len(sys.argv) < 8:
+        print("text_classification <input> <test_set> <word_emb_type> <word emb> <label type> <train_method> <num_classes>")
         sys.exit()
 
-    load_sample(sys.argv[1], sys.argv[2].lower(), sys.argv[3], sys.argv[4].lower(), int(sys.argv[6]))
+    load_sample(sys.argv[1], sys.argv[2], sys.argv[3].lower(), sys.argv[4], sys.argv[5].lower(), int(sys.argv[7]))
     total_sample_size = target_list.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
     train_set_offset = int(total_sample_size * cfg.train_set_ratio)
-    train_set_size_fake = int(total_batch_size * 1)
+    if len(test_list) != 0:
+        train_set_size = total_batch_size
+    test_batch_size = test_list.shape[0] / cfg.batch_size
 
     print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d' %
           (total_batch_size, train_set_size, word_dictionary_size))
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
-        sentimentObj = textClassificationModel(sess, sys.argv[5].lower(), int(sys.argv[6]))
+        sentimentObj = textClassificationModel(sess, sys.argv[6].lower(), int(sys.argv[7]))
         tf.global_variables_initializer().run()
 
         variables_names = [v.name for v in tf.trainable_variables()]
@@ -197,7 +223,7 @@ if __name__ == '__main__':
         cur_loss = 0.0
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
-            for i in range(train_set_size_fake):
+            for i in range(train_set_size):
                 if trainable is True:
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
@@ -208,14 +234,28 @@ if __name__ == '__main__':
             print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / cfg.batch_size))
 
             accuracy = 0.0
-            for j in range(total_batch_size - train_set_size):
-                k = j + train_set_size
-                iter_accuracy = sentimentObj.validate(emb_list,
-                                                      target_list[k * cfg.batch_size:(k + 1) * cfg.batch_size],
-                                                      labels[k * cfg.batch_size:(k + 1) * cfg.batch_size])
-                accuracy += iter_accuracy[0]
-                if max_accuracy < iter_accuracy[0]:
-                    max_accuracy = iter_accuracy[0]
+            if len(test_list) == 0:
+                for j in range(total_batch_size - train_set_size):
+                    k = j + train_set_size
+                    iter_accuracy = sentimentObj.validate(emb_list,
+                                                          target_list[k * cfg.batch_size:(k + 1) * cfg.batch_size],
+                                                          labels[k * cfg.batch_size:(k + 1) * cfg.batch_size])
+                    accuracy += iter_accuracy[0]
+                accuracy /= (total_batch_size - train_set_size)
+                if max_accuracy < accuracy:
+                    max_accuracy = accuracy
+                print("epoch_index %d : accuracy %f" % (epoch_index, accuracy))
+
+            else:
+                for j in range(test_batch_size):
+                    iter_accuracy = sentimentObj.validate(emb_list,
+                                                          test_list[j * cfg.batch_size:(j + 1) * cfg.batch_size],
+                                                          test_labels[j * cfg.batch_size:(j + 1) * cfg.batch_size])
+                    accuracy += iter_accuracy[0]
+                accuracy /= test_batch_size
+                if max_accuracy < accuracy:
+                    max_accuracy = accuracy
+                print("epoch_index %d : accuracy %f" % (epoch_index, accuracy))
 
             if epoch_index < cfg.early_stop_iter:
                 prev_avg_accu += accuracy
@@ -234,6 +274,5 @@ if __name__ == '__main__':
                 cur_avg_accu += accuracy
                 cur_loss += loss_sum
 
-            print("epoch_index %d : accuracy %f" % (epoch_index, accuracy / (total_batch_size - train_set_size)))
         print('max_accuracy is %f' % float("{0:.3f}".format(max_accuracy)))
         sess.close()

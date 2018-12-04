@@ -225,12 +225,14 @@ if __name__ == "__main__":
         print("counter is %d, real_counter is %d, top_1 precision is %f, top_3 precision is %f" %
               (counter, real_counter, float("{0:.3f}".format(top_1)), float("{0:.3f}".format(top_3))))
     elif sys.argv[2].lower() == "glove":
+        word_emb_dict = {}
         word_dict = {}
         reverse_word_dict = {}
         with open(sys.argv[3], 'r') as f:
             for idx, line in enumerate(f):
                 elements = line.strip('\r\n').split(' ')
-                word_dict[elements[0]] = [float(item) for idx, item in enumerate(elements) if idx > 0]
+                word_emb_dict[elements[0]] = [float(item) for sub_idx, item in enumerate(elements) if sub_idx > 0]
+                word_dict[elements[0]] = idx
                 reverse_word_dict[idx] = elements[0]
             f.close()
         counter = 0
@@ -245,7 +247,7 @@ if __name__ == "__main__":
                     com_item[3] not in word_dict:
                 continue
             real_counter += 1
-            new_vec = np.subtract(word_dict[com_item[2]], np.subtract(word_dict[com_item[0]], word_dict[com_item[1]]))
+            new_vec = np.subtract(word_emb_dict[com_item[2]], np.subtract(word_emb_dict[com_item[0]], word_emb_dict[com_item[1]]))
 
             # [TODO] put random sampling to another script to make prediction align
             sample_ids = np.random.randint(low=0, high=len(word_dict), size=compare_random_size + 1)
@@ -253,7 +255,7 @@ if __name__ == "__main__":
             score_dict = {}
             for idx in range(sample_ids.shape[0]):
                 score_dict[reverse_word_dict[sample_ids[idx]]] = cosin_distance(new_vec.tolist(),
-                                                                                word_dict[
+                                                                                word_emb_dict[
                                                                                     reverse_word_dict[sample_ids[idx]]])
             sim_key_list = sorted(score_dict, key=score_dict.get, reverse=True)
             for idx, key in enumerate(sim_key_list):

@@ -187,11 +187,12 @@ if __name__ == "__main__":
         print("{0:.6f}".format(stats.pearsonr(real_value_list, pred_value_list)[0]))
     elif sys.argv[1].lower() == "glove":
         word_dict = {}
-        with open(sys.argv[3], 'r') as f:
+        with open(sys.argv[2], 'r') as f:
             for idx, line in enumerate(f):
                 elements = line.strip('\r\n').split(' ')
                 word_dict[elements[0]] = [float(item) for idx, item in enumerate(elements) if idx > 0]
             f.close()
+        print('word_dict len is %d' % len(word_dict))
         index_dict = {}
         pred_score_dict = {}
         with open(sys.argv[13], 'r') as f:

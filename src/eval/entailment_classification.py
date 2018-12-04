@@ -165,6 +165,7 @@ class entailmentModel():
                 x = tf.squeeze(tf.nn.bias_add(tf.matmul(pool_layer, self.logit_w), self.logit_b))
                 self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=x, labels=self.label))
                 self.opt = tf.train.AdamOptimizer().minimize(self.loss)
+                self.tmp = tf.argmax(x, 1)
                 self.accuracy = tf.reduce_mean(
                     tf.cast(tf.equal(tf.argmax(x, 1), tf.argmax(self.label, 1)), tf.float32))
 
@@ -187,7 +188,7 @@ class entailmentModel():
         })
 
     def validate(self, word_emb, sent1, sent2, label):
-        return self.sess.run(self.accuracy, feed_dict={
+        return self.sess.run([self.accuracy, self.tmp], feed_dict={
             self.word_emb: word_emb,
             self.sent1: sent1,
             self.sent2: sent2,
@@ -204,7 +205,6 @@ if __name__ == '__main__':
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
     train_set_offset = int(total_sample_size * cfg.train_set_ratio)
-    train_set_size_fake = int(total_batch_size * 1)
 
     print('total_batch_size is %d, train_set_size is %d, word_dictionary_size is %d' %
           (total_batch_size, train_set_size, word_dictionary_size))
@@ -220,16 +220,16 @@ if __name__ == '__main__':
             print(k)
 
         trainable = False
-        max_accuracy = -1.0
         prev_avg_accu = 0.0
         cur_avg_accu = 0.0
         prev_loss = 0.0
         cur_loss = 0.0
         for pos_label in label_category_list:
+            max_accuracy = -1.0
             pos_label = int(pos_label)
             for epoch_index in range(cfg.epoch_size):
                 loss_sum = 0.0
-                for i in range(train_set_size_fake):
+                for i in range(train_set_size):
                     if trainable is True:
                         tf.get_variable_scope().reuse_variables()
                     trainable = True
@@ -243,14 +243,15 @@ if __name__ == '__main__':
                 accuracy = 0.0
                 for j in range(total_batch_size - train_set_size):
                     k = j + train_set_size
-                    item_accuracy = sentimentObj.validate(emb_list,
+                    item_accuracy, tmp = sentimentObj.validate(emb_list,
                                                            sent1_list[k * cfg.batch_size:(k + 1) * cfg.batch_size],
                                                            sent2_list[k * cfg.batch_size:(k + 1) * cfg.batch_size],
                                                            labels[k * cfg.batch_size:(k + 1) * cfg.batch_size])
                     accuracy += item_accuracy
-                    if item_accuracy > max_accuracy:
-                        max_accuracy = item_accuracy
-                print("%d epoch_index %d : accuracy %f" % (pos_label, epoch_index, accuracy / (total_batch_size - train_set_size)))
+                accuracy /= (total_batch_size - train_set_size)
+                if max_accuracy < accuracy:
+                    max_accuracy = accuracy
+                print("%d epoch_index %d : accuracy %f" % (pos_label, epoch_index, accuracy))
 
             if epoch_index < cfg.early_stop_iter:
                 prev_avg_accu += accuracy
@@ -268,5 +269,5 @@ if __name__ == '__main__':
             else:
                 cur_avg_accu += accuracy
                 cur_loss += loss_sum
-        print('max_accuracy is %f' % max_accuracy)
+            print('max_accuracy is %f' % max_accuracy)
         sess.close()
