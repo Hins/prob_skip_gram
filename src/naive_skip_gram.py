@@ -8,7 +8,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import sys
 sys.path.append("..")
 import tensorflow as tf
-from util.config import cfg
+from config.config import cfg
 import numpy as np
 
 target_list = []

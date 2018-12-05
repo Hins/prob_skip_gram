@@ -8,7 +8,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 import sys
 from tensorflow.contrib import rnn
 import tensorflow as tf
-from util.config import cfg
+from config.config import cfg
 import numpy as np
 
 word_dictionary_size = 0
@@ -349,7 +349,6 @@ if __name__ == '__main__':
     total_sample_size = target.shape[0]
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
-    train_set_size_fake = int(total_batch_size * 1)
 
     print('total_batch_size is %d, train_set_size is %d' %
           (total_batch_size, train_set_size))
@@ -390,9 +389,10 @@ if __name__ == '__main__':
         cur_avg_accu = 0.0
         prev_loss = 0.0
         cur_loss = 0.0
+        max_accu = 0.0
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
-            for i in range(total_batch_size):
+            for i in range(train_set_size):
                 if trainable is True:
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
@@ -420,22 +420,26 @@ if __name__ == '__main__':
                     print("parser_embed_weight not update")
                 if prev_partofspeech_embed_weight == partofspeech_embed_weight[0][0]:
                     print("partofspeech")
-            print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / cfg.batch_size / total_batch_size))
-            train_loss = PSGModelObj.get_loss_summary(loss_sum / cfg.batch_size / total_batch_size)
+            print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / total_batch_size))
+            train_loss = PSGModelObj.get_loss_summary(loss_sum / total_batch_size)
             train_writer.add_summary(train_loss, epoch_index + 1)
 
             accuracy = 0.0
-            for j in range(total_batch_size):
+            for j in range(total_batch_size - train_set_size):
+                k = j + train_set_size
                 iter_accuracy = PSGModelObj.validate(
-                                                     dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                     kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                     parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                     pos[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                     context[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                     context_prob[i * cfg.batch_size:(i + 1) * cfg.batch_size],
-                                                     sampled_candidates[i * cfg.batch_size:(i + 1) * cfg.batch_size])
+                                                     dict_desc[k*cfg.batch_size:(k+1)*cfg.batch_size],
+                                                     kb_entity[k*cfg.batch_size:(k+1)*cfg.batch_size],
+                                                     parser[k*cfg.batch_size:(k+1)*cfg.batch_size],
+                                                     pos[k*cfg.batch_size:(k+1)*cfg.batch_size],
+                                                     context[k*cfg.batch_size:(k+1)*cfg.batch_size],
+                                                     context_prob[k * cfg.batch_size:(k + 1) * cfg.batch_size],
+                                                     sampled_candidates[k * cfg.batch_size:(k + 1) * cfg.batch_size])
                 accuracy += iter_accuracy
-            print("iter %d : accuracy %f" % (epoch_index, accuracy / total_batch_size / cfg.batch_size))
+            accuracy /= (total_batch_size - train_set_size)
+            if max_accu < accuracy:
+                max_accu = accuracy
+            print("iter %d : accuracy %f" % (epoch_index, accuracy))
             if epoch_index < cfg.early_stop_iter:
                 prev_avg_accu += accuracy
                 prev_loss += loss_sum
@@ -452,8 +456,9 @@ if __name__ == '__main__':
             else:
                 cur_avg_accu += accuracy
                 cur_loss += loss_sum
-            test_accuracy = PSGModelObj.get_accuracy_summary(accuracy / total_batch_size / cfg.batch_size)
+            test_accuracy = PSGModelObj.get_accuracy_summary(accuracy)
             test_writer.add_summary(test_accuracy, epoch_index + 1)
+        print('max_accu is %f' % max_accu)
 
         word_embed_weight = PSGModelObj.get_word_emb()
         output_embed_file = open(sys.argv[14], 'w')

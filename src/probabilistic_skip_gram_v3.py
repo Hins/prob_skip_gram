@@ -8,7 +8,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 import sys
 from tensorflow.contrib import rnn
 import tensorflow as tf
-from util.config import cfg
+from config.config import cfg
 import numpy as np
 
 target = []
