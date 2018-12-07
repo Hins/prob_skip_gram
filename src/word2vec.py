@@ -16,7 +16,7 @@ if __name__ == '__main__':
         <input file>: input file
         <model file>: output model file
         '''
-        print("gensim_word2vec <separator> <input file> <model file>")
+        print("word2vec <separator> <input file> <model file>")
         sys.exit()
 
     separator = sys.argv[1]

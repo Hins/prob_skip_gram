@@ -16,17 +16,58 @@ parser_dictionary_size = 0
 partofspeech_dictionary_size = 0
 kb_relation_dictionary_size = 0
 
-target = []
-context = []
-context_prob = []
-pos = []
-parser = []
-dict_desc = []
-kb_entity = []
+target_offset = []
+context_offset = []
+pos_offset = []
+parser_offset = []
+dict_desc_offset = []
+kb_entity_offset = []
+
 def load_sample(target_file, word_dict_file, context_file, pos_file, pos_dict_file,
                 parser_file, parser_dict_file, dict_desc_file, kb_entity_file,
                 kb_entity_dict_file, word_count_file, word_coocur_file):
-    global target, context, context_prob, pos, parser, dict_desc, kb_entity
+    global target_offset, context_offset, context_prob_offset, pos_offset, parser_offset, dict_desc_offset, kb_entity_offset
+
+    offset = 0
+    with open(target_file, 'r') as f:
+        for line in f:
+            target_offset.append(offset)
+            offset += len(line)
+        f.close()
+    word_dictionary_size = len(open(word_dict_file).readlines()) + 1
+    offset = 0
+    with open(context_file, 'r') as f:
+        for line in f:
+            context_offset.append(offset)
+            offset += len(line)
+        f.close()
+    offset = 0
+    with open(pos_file, 'r') as f:
+        for line in f:
+            pos_offset.append(offset)
+            offset += len(line)
+        f.close()
+    partofspeech_dictionary_size = len(open(pos_dict_file).readlines()) + 1
+    offset = 0
+    with open(parser_file, 'r') as f:
+        for line in f:
+            parser_offset.append(offset)
+            offset += len(line)
+        f.close()
+    parser_dictionary_size = len(open(parser_dict_file).readlines()) + 1
+    offset = 0
+    with open(dict_desc_file, 'r') as f:
+        for line in f:
+            dict_desc_offset.append(offset)
+            offset += len(line)
+        f.close()
+    offset = 0
+    with open(kb_entity_file, 'r') as f:
+        for line in f:
+            kb_entity_offset.append(offset)
+            offset += len(line)
+        f.close()
+    kb_relation_dictionary_size = len(open(kb_entity_dict_file).readlines()) + 1
     word_count_dict = {}
     word_coocur_dict = {}
     with open(word_count_file, 'r') as f:
@@ -39,95 +80,8 @@ def load_sample(target_file, word_dict_file, context_file, pos_file, pos_dict_fi
             elements = line.strip('\r\n').split('\t')
             word_coocur_dict[elements[0]] = int(elements[1])
         f.close()
-    with open(target_file, 'r') as f:
-        for line in f:
-            target.append(line.strip('\r\n'))
-        f.close()
-    word_dictionary_size = len(open(word_dict_file).readlines()) + 1
-    with open(context_file, 'r') as f:
-        for index, line in enumerate(f):
-            context_word_ids = line.strip('\r\n').split(',')
-            context.append(context_word_ids)
-            sub_context_prob = []
-            # word id not in dictionary
-            if target[index] not in word_count_dict:
-                for i in range(len(context_word_ids)):
-                    sub_context_prob.append(1.0 / float(cfg.context_window_size))
-            else:
-                accumulate_count = 0
-                for co_word in context_word_ids:
-                    co_name1 = target[index] + cfg.coocur_separator + co_word
-                    co_name2 = co_word + cfg.coocur_separator + target[index]
-                    if co_name1 in word_coocur_dict:
-                        sub_context_prob.append(word_coocur_dict[co_name1])
-                        accumulate_count += word_coocur_dict[co_name1]
-                    elif co_name2 in word_coocur_dict:
-                        sub_context_prob.append(word_coocur_dict[co_name2])
-                        accumulate_count += word_coocur_dict[co_name2]
-                    else:
-                        sub_context_prob.append(0)
-                if accumulate_count == 0:
-                    sub_context_prob = []
-                    for i in range(len(context_word_ids)):
-                        sub_context_prob.append(1.0 / float(cfg.context_window_size))
-                else:
-                    sub_context_prob = [float(item) / float(accumulate_count) for item in sub_context_prob]
-            context_prob.append(np.power(sub_context_prob, cfg.normalize_value))
-        f.close()
-    with open(pos_file, 'r') as f:
-        for line in f:
-            pos.append(line.strip('\r\n'))
-        f.close()
-    partofspeech_dictionary_size = len(open(pos_dict_file).readlines()) + 1
-    with open(parser_file, 'r') as f:
-        for line in f:
-            parser_list = line.strip('\r\n').replace(' ','').split(',')
-            if len(parser_list) < cfg.context_window_size:
-                supplement_parser_size = cfg.context_window_size - len(parser_list)
-                for i in range(supplement_parser_size):
-                    parser_list.append(0)
-            parser.append(parser_list)
-        f.close()
-    parser_dictionary_size = len(open(parser_dict_file).readlines()) + 1
-    with open(dict_desc_file, 'r') as f:
-        for line in f:
-            elements = line.strip('\r\n').split(',')
-            desc_len = len(elements)
-            dict_desc_list = []
-            if desc_len >= cfg.dict_time_step:
-                for index, item in enumerate(elements):
-                    if index >= cfg.dict_time_step:
-                        break
-                    dict_desc_list.append(item)
-            else:
-                dict_desc_list = elements[:]
-                remain_len = cfg.dict_time_step - desc_len
-                for i in range(remain_len):
-                    dict_desc_list.append(0)
-            dict_desc.append(dict_desc_list)
-        f.close()
-    with open(kb_entity_file, 'r') as f:
-        for line in f:
-            kb_entity_list = line.strip('\r\n').split(',')
-            if len(kb_entity_list) > cfg.kb_relation_length:
-                kb_entity_list = kb_entity_list[0:cfg.kb_relation_length]
-            else:
-                supplement_kb_size = cfg.kb_relation_length - len(kb_entity_list)
-                for i in range(supplement_kb_size):
-                    kb_entity_list.append("0")
-            kb_entity.append(kb_entity_list)
-        f.close()
-    kb_relation_dictionary_size = len(open(kb_entity_dict_file).readlines()) + 1
 
-    target = np.asarray(target)
-    context = np.asarray(context)
-    context_prob = np.asarray(context_prob)
-    pos = np.asarray(pos)
-    parser = np.asarray(parser)
-    dict_desc = np.asarray(dict_desc)
-    kb_entity = np.asarray(kb_entity)
-
-    return [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size]
+    return [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size, word_count_dict, word_coocur_dict]
 
 class MIPSG():
     def __init__(self, sess):
@@ -334,35 +288,31 @@ class MIPSG():
 
 if __name__ == '__main__':
     if len(sys.argv) < 18:
-        print("probabilistic_skip_gram <target> <word_dict> <context> <part-of-speech> <part-of-speech_dict> <parser> "
+        print("MIPSG <target> <word_dict> <context> <part-of-speech> <part-of-speech_dict> <parser> "
               "<parser_dict> <dictionary desc> <kb entity> <kb_entity_dict> <word count dict> <word coocur dict> "
               "<negative sample file> <word emb output> <parser emb output> <partofspeech emb output> <kb emb output>")
         sys.exit()
     [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size,
-     kb_relation_dictionary_size] = load_sample(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5],
-                                                sys.argv[6], sys.argv[7], sys.argv[8],
-                                                sys.argv[9], sys.argv[10], sys.argv[11], sys.argv[12])
+     kb_relation_dictionary_size, word_count_dict, word_coocur_dict] = load_sample(
+        sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6],
+        sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10], sys.argv[11], sys.argv[12])
     print("word_dictionary_size is %d, partofspeech_dictionary_size is %d, parser_dictionary_size is %d,"
           "kb_relation_dictionary_size is %d" % (
           word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size))
 
-    total_sample_size = target.shape[0]
+    total_sample_size = len(context_offset)
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
 
     print('total_batch_size is %d, train_set_size is %d' %
           (total_batch_size, train_set_size))
 
-    sampled_candidates = np.zeros(shape=[total_sample_size, cfg.negative_sample_size], dtype=np.int32)
-    sampled_expected_count = np.zeros(shape=[total_sample_size, cfg.negative_sample_size], dtype=np.float32)
+    negative_offset = []
+    offset = 0
     with open(sys.argv[13], 'r') as f:
-        for idx, line in enumerate(f):
-            elements = [int(item) for item in line.strip('\r\n').split(',')]
-            sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
-            sampled_expected_count[idx] = np.full(shape=[cfg.negative_sample_size],
-                                                  fill_value=(1.0 - np.sum(
-                                                      context_prob[idx])) / cfg.negative_sample_size,
-                                                  dtype=np.float32)
+        for line in f:
+            negative_offset.append(offset)
+            offset += len(line)
         f.close()
 
     config = tf.ConfigProto(allow_soft_placement=True)
@@ -390,21 +340,151 @@ if __name__ == '__main__':
         prev_loss = 0.0
         cur_loss = 0.0
         max_accu = 0.0
+
         for epoch_index in range(cfg.epoch_size):
             loss_sum = 0.0
             for i in range(train_set_size):
                 if trainable is True:
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
+
+                # prepare train data
+                target = []
+                with open(sys.argv[1], 'r') as f:
+                    f.seek(target_offset[i * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        target.append(line.strip('\r\n'))
+                    f.close()
+                target = np.asarray(target, dtype=np.int32)
+                dict_desc = []
+                with open(sys.argv[8], 'r') as f:
+                    f.seek(dict_desc_offset[i * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        elements = line.strip('\r\n').split(',')
+                        desc_len = len(elements)
+                        dict_desc_list = []
+                        if desc_len >= cfg.dict_time_step:
+                            for index, item in enumerate(elements):
+                                if index >= cfg.dict_time_step:
+                                    break
+                                dict_desc_list.append(item)
+                        else:
+                            dict_desc_list = elements[:]
+                            remain_len = cfg.dict_time_step - desc_len
+                            for i in range(remain_len):
+                                dict_desc_list.append(0)
+                        dict_desc.append(dict_desc_list)
+                    f.close()
+                dict_desc = np.asarray(dict_desc, dtype=np.int32)
+
+                kb_entity = []
+                with open(sys.argv[9], 'r') as f:
+                    f.seek(kb_entity_offset[i * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        kb_entity_list = line.strip('\r\n').split(',')
+                        if len(kb_entity_list) > cfg.kb_relation_length:
+                            kb_entity_list = kb_entity_list[0:cfg.kb_relation_length]
+                        else:
+                            supplement_kb_size = cfg.kb_relation_length - len(kb_entity_list)
+                            for i in range(supplement_kb_size):
+                                kb_entity_list.append("0")
+                        kb_entity.append(kb_entity_list)
+                    f.close()
+                kb_entity = np.asarray(kb_entity, dtype=np.int32)
+
+                parser = []
+                with open(sys.argv[6], 'r') as f:
+                    f.seek(parser_offset[i * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        parser_list = line.strip('\r\n').replace(' ', '').split(',')
+                        if len(parser_list) < cfg.context_window_size:
+                            supplement_parser_size = cfg.context_window_size - len(parser_list)
+                            for i in range(supplement_parser_size):
+                                parser_list.append(0)
+                        parser.append(parser_list)
+                    f.close()
+                parser = np.asarray(parser, dtype=np.int32)
+
+                pos = []
+                with open(sys.argv[4], 'r') as f:
+                    f.seek(pos_offset[i * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        pos.append(line.strip('\r\n'))
+                    f.close()
+                pos = np.asarray(pos, dtype=np.int32)
+
+                context = []
+                context_prob = []
+                with open(sys.argv[3], 'r') as f:
+                    f.seek(context_offset[i * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        context_word_ids = line.strip('\r\n').split(',')
+                        context.append(context_word_ids)
+                        sub_context_prob = []
+                        # word id not in dictionary
+                        if target[idx] not in word_count_dict:
+                            for i in range(len(context_word_ids)):
+                                sub_context_prob.append(1.0 / float(cfg.context_window_size))
+                        else:
+                            accumulate_count = 0
+                            for co_word in context_word_ids:
+                                co_name1 = target[idx] + cfg.coocur_separator + co_word
+                                co_name2 = co_word + cfg.coocur_separator + target[idx]
+                                if co_name1 in word_coocur_dict:
+                                    sub_context_prob.append(word_coocur_dict[co_name1])
+                                    accumulate_count += word_coocur_dict[co_name1]
+                                elif co_name2 in word_coocur_dict:
+                                    sub_context_prob.append(word_coocur_dict[co_name2])
+                                    accumulate_count += word_coocur_dict[co_name2]
+                                else:
+                                    sub_context_prob.append(0)
+                            if accumulate_count == 0:
+                                sub_context_prob = []
+                                for i in range(len(context_word_ids)):
+                                    sub_context_prob.append(1.0 / float(cfg.context_window_size))
+                            else:
+                                sub_context_prob = [float(item) / float(accumulate_count) for item in sub_context_prob]
+                        context_prob.append(np.power(sub_context_prob, cfg.normalize_value))
+                    f.close()
+                context = np.asarray(context, dtype=np.int32)
+                context_prob = np.asarray(context_prob, dtype=np.float32)
+
+                sampled_candidates = np.zeros(shape=[cfg.batch_size, cfg.negative_sample_size], dtype=np.int32)
+                sampled_expected_count = np.zeros(shape=[cfg.batch_size, cfg.negative_sample_size], dtype=np.float32)
+                with open(sys.argv[13], 'r') as f:
+                    f.seek(negative_offset[i * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        elements = [int(item) for item in line.strip('\r\n').split(',')]
+                        sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
+                        sampled_expected_count[idx] = np.full(shape=[cfg.negative_sample_size],
+                                                              fill_value=(1.0 - np.sum(
+                                                                  context_prob[idx])) / cfg.negative_sample_size,
+                                                              dtype=np.float32)
+                    f.close()
+
                 _, iter_loss, word_embed_weight, parser_embed_weight, partofspeech_embed_weight, kb_relation_embed_weight, softmax_w, softmax_b = PSGModelObj.train(
-                                                 dict_desc[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 kb_entity[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 parser[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 pos[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 context[i*cfg.batch_size:(i+1)*cfg.batch_size],
-                                                 context_prob[i * cfg.batch_size:(i + 1) * cfg.batch_size],
-                                                 sampled_candidates[i * cfg.batch_size:(i + 1) * cfg.batch_size],
-                                                 sampled_expected_count[i * cfg.batch_size:(i + 1) * cfg.batch_size])
+                                                 dict_desc,
+                                                 kb_entity,
+                                                 parser,
+                                                 pos,
+                                                 context,
+                                                 context_prob,
+                                                 sampled_candidates,
+                                                 sampled_expected_count)
                 loss_sum += iter_loss
             if epoch_index == 0:
                 prev_word_embed_weight = word_embed_weight[0][0]
@@ -420,21 +500,145 @@ if __name__ == '__main__':
                     print("parser_embed_weight not update")
                 if prev_partofspeech_embed_weight == partofspeech_embed_weight[0][0]:
                     print("partofspeech")
-            print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / total_batch_size))
-            train_loss = PSGModelObj.get_loss_summary(loss_sum / total_batch_size)
+            print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / train_set_size))
+            train_loss = PSGModelObj.get_loss_summary(loss_sum / train_set_size)
             train_writer.add_summary(train_loss, epoch_index + 1)
 
             accuracy = 0.0
             for j in range(total_batch_size - train_set_size):
                 k = j + train_set_size
+
+                # prepare train data
+                target = []
+                with open(sys.argv[1], 'r') as f:
+                    f.seek(target_offset[k * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        target.append(line.strip('\r\n'))
+                    f.close()
+                target = np.asarray(target, dtype=np.int32)
+                dict_desc = []
+                with open(sys.argv[8], 'r') as f:
+                    f.seek(dict_desc_offset[k * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        elements = line.strip('\r\n').split(',')
+                        desc_len = len(elements)
+                        dict_desc_list = []
+                        if desc_len >= cfg.dict_time_step:
+                            for index, item in enumerate(elements):
+                                if index >= cfg.dict_time_step:
+                                    break
+                                dict_desc_list.append(item)
+                        else:
+                            dict_desc_list = elements[:]
+                            remain_len = cfg.dict_time_step - desc_len
+                            for i in range(remain_len):
+                                dict_desc_list.append(0)
+                        dict_desc.append(dict_desc_list)
+                    f.close()
+                dict_desc = np.asarray(dict_desc, dtype=np.int32)
+
+                kb_entity = []
+                with open(sys.argv[9], 'r') as f:
+                    f.seek(kb_entity_offset[k * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        kb_entity_list = line.strip('\r\n').split(',')
+                        if len(kb_entity_list) > cfg.kb_relation_length:
+                            kb_entity_list = kb_entity_list[0:cfg.kb_relation_length]
+                        else:
+                            supplement_kb_size = cfg.kb_relation_length - len(kb_entity_list)
+                            for i in range(supplement_kb_size):
+                                kb_entity_list.append("0")
+                        kb_entity.append(kb_entity_list)
+                    f.close()
+                kb_entity = np.asarray(kb_entity, dtype=np.int32)
+
+                parser = []
+                with open(sys.argv[6], 'r') as f:
+                    f.seek(parser_offset[k * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        parser_list = line.strip('\r\n').replace(' ', '').split(',')
+                        if len(parser_list) < cfg.context_window_size:
+                            supplement_parser_size = cfg.context_window_size - len(parser_list)
+                            for i in range(supplement_parser_size):
+                                parser_list.append(0)
+                        parser.append(parser_list)
+                    f.close()
+                parser = np.asarray(parser, dtype=np.int32)
+
+                pos = []
+                with open(sys.argv[4], 'r') as f:
+                    f.seek(pos_offset[k * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        pos.append(line.strip('\r\n'))
+                    f.close()
+                pos = np.asarray(pos, dtype=np.int32)
+
+                context = []
+                context_prob = []
+                with open(sys.argv[3], 'r') as f:
+                    f.seek(context_offset[k * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        context_word_ids = line.strip('\r\n').split(',')
+                        context.append(context_word_ids)
+                        sub_context_prob = []
+                        # word id not in dictionary
+                        if target[idx] not in word_count_dict:
+                            for i in range(len(context_word_ids)):
+                                sub_context_prob.append(1.0 / float(cfg.context_window_size))
+                        else:
+                            accumulate_count = 0
+                            for co_word in context_word_ids:
+                                co_name1 = target[idx] + cfg.coocur_separator + co_word
+                                co_name2 = co_word + cfg.coocur_separator + target[idx]
+                                if co_name1 in word_coocur_dict:
+                                    sub_context_prob.append(word_coocur_dict[co_name1])
+                                    accumulate_count += word_coocur_dict[co_name1]
+                                elif co_name2 in word_coocur_dict:
+                                    sub_context_prob.append(word_coocur_dict[co_name2])
+                                    accumulate_count += word_coocur_dict[co_name2]
+                                else:
+                                    sub_context_prob.append(0)
+                            if accumulate_count == 0:
+                                sub_context_prob = []
+                                for i in range(len(context_word_ids)):
+                                    sub_context_prob.append(1.0 / float(cfg.context_window_size))
+                            else:
+                                sub_context_prob = [float(item) / float(accumulate_count) for item in sub_context_prob]
+                        context_prob.append(np.power(sub_context_prob, cfg.normalize_value))
+                    f.close()
+                context = np.asarray(context, dtype=np.int32)
+                context_prob = np.asarray(context_prob, dtype=np.float32)
+
+                sampled_candidates = np.zeros(shape=[cfg.batch_size, cfg.negative_sample_size], dtype=np.int32)
+                with open(sys.argv[13], 'r') as f:
+                    f.seek(negative_offset[k * cfg.batch_size])
+                    for idx, line in enumerate(f):
+                        if idx >= cfg.batch_size:
+                            break
+                        elements = [int(item) for item in line.strip('\r\n').split(',')]
+                        sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
+                    f.close()
+
                 iter_accuracy = PSGModelObj.validate(
-                                                     dict_desc[k*cfg.batch_size:(k+1)*cfg.batch_size],
-                                                     kb_entity[k*cfg.batch_size:(k+1)*cfg.batch_size],
-                                                     parser[k*cfg.batch_size:(k+1)*cfg.batch_size],
-                                                     pos[k*cfg.batch_size:(k+1)*cfg.batch_size],
-                                                     context[k*cfg.batch_size:(k+1)*cfg.batch_size],
-                                                     context_prob[k * cfg.batch_size:(k + 1) * cfg.batch_size],
-                                                     sampled_candidates[k * cfg.batch_size:(k + 1) * cfg.batch_size])
+                                                     dict_desc,
+                                                     kb_entity,
+                                                     parser,
+                                                     pos,
+                                                     context,
+                                                     context_prob,
+                                                     sampled_candidates)
                 accuracy += iter_accuracy
             accuracy /= (total_batch_size - train_set_size)
             if max_accu < accuracy:

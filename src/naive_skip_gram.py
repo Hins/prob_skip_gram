@@ -150,7 +150,7 @@ class SkipGramModel():
 
 if __name__ == '__main__':
     if len(sys.argv) < 7:
-        print("skipgram <input file> <dict file> <context file> <negative sample file> <output model> <word emb model>")
+        print("naive_skip_gram <input file> <dict file> <context file> <negative sample file> <output model> <word emb model>")
         sys.exit()
 
     load_sample(sys.argv[1], sys.argv[2], sys.argv[3])
