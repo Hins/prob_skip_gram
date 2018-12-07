@@ -499,7 +499,7 @@ if __name__ == '__main__':
                 if prev_parser_embed_weight == parser_embed_weight[0][0]:
                     print("parser_embed_weight not update")
                 if prev_partofspeech_embed_weight == partofspeech_embed_weight[0][0]:
-                    print("partofspeech")
+                    print("partofspeech_embed_weight not update")
             print("epoch_index %d, loss is %f" % (epoch_index, loss_sum / train_set_size))
             train_loss = PSGModelObj.get_loss_summary(loss_sum / train_set_size)
             train_writer.add_summary(train_loss, epoch_index + 1)
