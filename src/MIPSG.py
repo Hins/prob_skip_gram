@@ -16,57 +16,11 @@ parser_dictionary_size = 0
 partofspeech_dictionary_size = 0
 kb_relation_dictionary_size = 0
 
-target_offset = []
-context_offset = []
-pos_offset = []
-parser_offset = []
-dict_desc_offset = []
-kb_entity_offset = []
-
-def load_sample(target_file, word_dict_file, context_file, pos_file, pos_dict_file,
-                parser_file, parser_dict_file, dict_desc_file, kb_entity_file,
+def load_sample(word_dict_file, pos_dict_file, parser_dict_file,
                 kb_entity_dict_file, word_count_file, word_coocur_file):
-    global target_offset, context_offset, context_prob_offset, pos_offset, parser_offset, dict_desc_offset, kb_entity_offset
-
-    offset = 0
-    with open(target_file, 'r') as f:
-        for line in f:
-            target_offset.append(offset)
-            offset += len(line)
-        f.close()
     word_dictionary_size = len(open(word_dict_file).readlines()) + 1
-    offset = 0
-    with open(context_file, 'r') as f:
-        for line in f:
-            context_offset.append(offset)
-            offset += len(line)
-        f.close()
-    offset = 0
-    with open(pos_file, 'r') as f:
-        for line in f:
-            pos_offset.append(offset)
-            offset += len(line)
-        f.close()
     partofspeech_dictionary_size = len(open(pos_dict_file).readlines()) + 1
-    offset = 0
-    with open(parser_file, 'r') as f:
-        for line in f:
-            parser_offset.append(offset)
-            offset += len(line)
-        f.close()
     parser_dictionary_size = len(open(parser_dict_file).readlines()) + 1
-    offset = 0
-    with open(dict_desc_file, 'r') as f:
-        for line in f:
-            dict_desc_offset.append(offset)
-            offset += len(line)
-        f.close()
-    offset = 0
-    with open(kb_entity_file, 'r') as f:
-        for line in f:
-            kb_entity_offset.append(offset)
-            offset += len(line)
-        f.close()
     kb_relation_dictionary_size = len(open(kb_entity_dict_file).readlines()) + 1
     word_count_dict = {}
     word_coocur_dict = {}
@@ -292,28 +246,20 @@ if __name__ == '__main__':
               "<parser_dict> <dictionary desc> <kb entity> <kb_entity_dict> <word count dict> <word coocur dict> "
               "<negative sample file> <word emb output> <parser emb output> <partofspeech emb output> <kb emb output>")
         sys.exit()
+
     [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size,
      kb_relation_dictionary_size, word_count_dict, word_coocur_dict] = load_sample(
-        sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6],
-        sys.argv[7], sys.argv[8], sys.argv[9], sys.argv[10], sys.argv[11], sys.argv[12])
+        sys.argv[2], sys.argv[5], sys.argv[7], sys.argv[10], sys.argv[11], sys.argv[12])
     print("word_dictionary_size is %d, partofspeech_dictionary_size is %d, parser_dictionary_size is %d,"
           "kb_relation_dictionary_size is %d" % (
           word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size))
 
-    total_sample_size = len(context_offset)
+    total_sample_size = len(open(sys.argv[1]).readlines())
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
 
     print('total_batch_size is %d, train_set_size is %d' %
           (total_batch_size, train_set_size))
-
-    negative_offset = []
-    offset = 0
-    with open(sys.argv[13], 'r') as f:
-        for line in f:
-            negative_offset.append(offset)
-            offset += len(line)
-        f.close()
 
     config = tf.ConfigProto(allow_soft_placement=True)
     with tf.Session(config=config) as sess:
@@ -348,21 +294,26 @@ if __name__ == '__main__':
                     tf.get_variable_scope().reuse_variables()
                 trainable = True
 
+                start_offset = i * cfg.batch_size
+                end_offset = (i + 1) * cfg.batch_size
+
                 # prepare train data
                 target = []
                 with open(sys.argv[1], 'r') as f:
-                    f.seek(target_offset[i * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         target.append(line.strip('\r\n'))
                     f.close()
                 target = np.asarray(target, dtype=np.int32)
                 dict_desc = []
                 with open(sys.argv[8], 'r') as f:
-                    f.seek(dict_desc_offset[i * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         elements = line.strip('\r\n').split(',')
                         desc_len = len(elements)
@@ -383,9 +334,10 @@ if __name__ == '__main__':
 
                 kb_entity = []
                 with open(sys.argv[9], 'r') as f:
-                    f.seek(kb_entity_offset[i * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         kb_entity_list = line.strip('\r\n').split(',')
                         if len(kb_entity_list) > cfg.kb_relation_length:
@@ -400,9 +352,10 @@ if __name__ == '__main__':
 
                 parser = []
                 with open(sys.argv[6], 'r') as f:
-                    f.seek(parser_offset[i * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         parser_list = line.strip('\r\n').replace(' ', '').split(',')
                         if len(parser_list) < cfg.context_window_size:
@@ -415,9 +368,10 @@ if __name__ == '__main__':
 
                 pos = []
                 with open(sys.argv[4], 'r') as f:
-                    f.seek(pos_offset[i * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         pos.append(line.strip('\r\n'))
                     f.close()
@@ -426,9 +380,10 @@ if __name__ == '__main__':
                 context = []
                 context_prob = []
                 with open(sys.argv[3], 'r') as f:
-                    f.seek(context_offset[i * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         context_word_ids = line.strip('\r\n').split(',')
                         context.append(context_word_ids)
@@ -464,9 +419,10 @@ if __name__ == '__main__':
                 sampled_candidates = np.zeros(shape=[cfg.batch_size, cfg.negative_sample_size], dtype=np.int32)
                 sampled_expected_count = np.zeros(shape=[cfg.batch_size, cfg.negative_sample_size], dtype=np.float32)
                 with open(sys.argv[13], 'r') as f:
-                    f.seek(negative_offset[i * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         elements = [int(item) for item in line.strip('\r\n').split(',')]
                         sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
@@ -475,6 +431,7 @@ if __name__ == '__main__':
                                                                   context_prob[idx])) / cfg.negative_sample_size,
                                                               dtype=np.float32)
                     f.close()
+                print("prepare train data complete")
 
                 _, iter_loss, word_embed_weight, parser_embed_weight, partofspeech_embed_weight, kb_relation_embed_weight, softmax_w, softmax_b = PSGModelObj.train(
                                                  dict_desc,
@@ -508,21 +465,25 @@ if __name__ == '__main__':
             for j in range(total_batch_size - train_set_size):
                 k = j + train_set_size
 
+                start_offset = k * cfg.batch_size
+                end_offset = (k + 1) * cfg.batch_size
                 # prepare train data
                 target = []
                 with open(sys.argv[1], 'r') as f:
-                    f.seek(target_offset[k * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         target.append(line.strip('\r\n'))
                     f.close()
                 target = np.asarray(target, dtype=np.int32)
                 dict_desc = []
                 with open(sys.argv[8], 'r') as f:
-                    f.seek(dict_desc_offset[k * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         elements = line.strip('\r\n').split(',')
                         desc_len = len(elements)
@@ -543,9 +504,10 @@ if __name__ == '__main__':
 
                 kb_entity = []
                 with open(sys.argv[9], 'r') as f:
-                    f.seek(kb_entity_offset[k * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         kb_entity_list = line.strip('\r\n').split(',')
                         if len(kb_entity_list) > cfg.kb_relation_length:
@@ -560,9 +522,10 @@ if __name__ == '__main__':
 
                 parser = []
                 with open(sys.argv[6], 'r') as f:
-                    f.seek(parser_offset[k * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         parser_list = line.strip('\r\n').replace(' ', '').split(',')
                         if len(parser_list) < cfg.context_window_size:
@@ -575,9 +538,10 @@ if __name__ == '__main__':
 
                 pos = []
                 with open(sys.argv[4], 'r') as f:
-                    f.seek(pos_offset[k * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         pos.append(line.strip('\r\n'))
                     f.close()
@@ -586,9 +550,10 @@ if __name__ == '__main__':
                 context = []
                 context_prob = []
                 with open(sys.argv[3], 'r') as f:
-                    f.seek(context_offset[k * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         context_word_ids = line.strip('\r\n').split(',')
                         context.append(context_word_ids)
@@ -623,9 +588,10 @@ if __name__ == '__main__':
 
                 sampled_candidates = np.zeros(shape=[cfg.batch_size, cfg.negative_sample_size], dtype=np.int32)
                 with open(sys.argv[13], 'r') as f:
-                    f.seek(negative_offset[k * cfg.batch_size])
                     for idx, line in enumerate(f):
-                        if idx >= cfg.batch_size:
+                        if idx < start_offset:
+                            continue
+                        if idx >= end_offset:
                             break
                         elements = [int(item) for item in line.strip('\r\n').split(',')]
                         sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
