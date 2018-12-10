@@ -250,7 +250,7 @@ if __name__ == '__main__':
     [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size,
      kb_relation_dictionary_size, word_count_dict, word_coocur_dict] = load_sample(
         sys.argv[2], sys.argv[5], sys.argv[7], sys.argv[10], sys.argv[11], sys.argv[12])
-    print("word_dictionary_size is %d, partofspeech_dictionary_size is %d, parser_dictionary_size is %d,"
+    print("word_dictionary_size is %d, partofspeech_dictionary_size is %d, parser_dictionary_size is %d, "
           "kb_relation_dictionary_size is %d" % (
           word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size))
 
@@ -389,14 +389,14 @@ if __name__ == '__main__':
                         context.append(context_word_ids)
                         sub_context_prob = []
                         # word id not in dictionary
-                        if target[idx] not in word_count_dict:
+                        if target[idx - start_offset] not in word_count_dict:
                             for i in range(len(context_word_ids)):
                                 sub_context_prob.append(1.0 / float(cfg.context_window_size))
                         else:
                             accumulate_count = 0
                             for co_word in context_word_ids:
-                                co_name1 = target[idx] + cfg.coocur_separator + co_word
-                                co_name2 = co_word + cfg.coocur_separator + target[idx]
+                                co_name1 = target[idx - start_offset] + cfg.coocur_separator + co_word
+                                co_name2 = co_word + cfg.coocur_separator + target[idx - start_offset]
                                 if co_name1 in word_coocur_dict:
                                     sub_context_prob.append(word_coocur_dict[co_name1])
                                     accumulate_count += word_coocur_dict[co_name1]
@@ -425,13 +425,12 @@ if __name__ == '__main__':
                         if idx >= end_offset:
                             break
                         elements = [int(item) for item in line.strip('\r\n').split(',')]
-                        sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
-                        sampled_expected_count[idx] = np.full(shape=[cfg.negative_sample_size],
+                        sampled_candidates[idx - start_offset] = np.asarray(elements, dtype=np.int32)
+                        sampled_expected_count[idx - start_offset] = np.full(shape=[cfg.negative_sample_size],
                                                               fill_value=(1.0 - np.sum(
-                                                                  context_prob[idx])) / cfg.negative_sample_size,
+                                                                  context_prob[idx - start_offset])) / cfg.negative_sample_size,
                                                               dtype=np.float32)
                     f.close()
-                print("prepare train data complete")
 
                 _, iter_loss, word_embed_weight, parser_embed_weight, partofspeech_embed_weight, kb_relation_embed_weight, softmax_w, softmax_b = PSGModelObj.train(
                                                  dict_desc,
@@ -559,14 +558,14 @@ if __name__ == '__main__':
                         context.append(context_word_ids)
                         sub_context_prob = []
                         # word id not in dictionary
-                        if target[idx] not in word_count_dict:
+                        if target[idx - start_offset] not in word_count_dict:
                             for i in range(len(context_word_ids)):
                                 sub_context_prob.append(1.0 / float(cfg.context_window_size))
                         else:
                             accumulate_count = 0
                             for co_word in context_word_ids:
-                                co_name1 = target[idx] + cfg.coocur_separator + co_word
-                                co_name2 = co_word + cfg.coocur_separator + target[idx]
+                                co_name1 = target[idx - start_offset] + cfg.coocur_separator + co_word
+                                co_name2 = co_word + cfg.coocur_separator + target[idx - start_offset]
                                 if co_name1 in word_coocur_dict:
                                     sub_context_prob.append(word_coocur_dict[co_name1])
                                     accumulate_count += word_coocur_dict[co_name1]
@@ -594,7 +593,7 @@ if __name__ == '__main__':
                         if idx >= end_offset:
                             break
                         elements = [int(item) for item in line.strip('\r\n').split(',')]
-                        sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
+                        sampled_candidates[idx - start_offset] = np.asarray(elements, dtype=np.int32)
                     f.close()
 
                 iter_accuracy = PSGModelObj.validate(

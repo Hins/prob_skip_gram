@@ -9,10 +9,10 @@ flags = tf.app.flags
 
 flags.DEFINE_integer('word_embedding_size', 256, 'word id embedding size')
 flags.DEFINE_integer('dict_time_step', 15, 'dictionary sentence time step')
-flags.DEFINE_integer('kb_embedding_size', 200, 'knowledge base relation embedding size')
+flags.DEFINE_integer('kb_embedding_size', 100, 'knowledge base relation embedding size')
 flags.DEFINE_integer('kb_relation_length', 5, 'knowledge base relation one-hot length')
-flags.DEFINE_integer('parser_embedding_size', 300, 'parser embedding size with another word')
-flags.DEFINE_integer('partofspeech_embedding_size', 400, 'part of speech embedding size')
+flags.DEFINE_integer('parser_embedding_size', 10, 'parser embedding size with another word')
+flags.DEFINE_integer('partofspeech_embedding_size', 30, 'part of speech embedding size')
 flags.DEFINE_integer('context_window_size', 4, 'context window size')
 flags.DEFINE_integer('dict_lstm_hidden_size', 128, 'dictionary lstm model hidden size')
 flags.DEFINE_integer('target_lstm_hidden_size', 300, 'target lstm model hidden size')

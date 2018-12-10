@@ -525,14 +525,14 @@ if __name__ == '__main__':
                         context.append(context_word_ids)
                         sub_context_prob = []
                         # word id not in dictionary
-                        if target[idx] not in word_count_dict:
+                        if target[idx - start_offset] not in word_count_dict:
                             for i in range(len(context_word_ids)):
                                 sub_context_prob.append(1.0 / float(cfg.context_window_size))
                         else:
                             accumulate_count = 0
                             for co_word in context_word_ids:
-                                co_name1 = target[idx] + cfg.coocur_separator + co_word
-                                co_name2 = co_word + cfg.coocur_separator + target[idx]
+                                co_name1 = target[idx - start_offset] + cfg.coocur_separator + co_word
+                                co_name2 = co_word + cfg.coocur_separator + target[idx - start_offset]
                                 if co_name1 in word_coocur_dict:
                                     sub_context_prob.append(word_coocur_dict[co_name1])
                                     accumulate_count += word_coocur_dict[co_name1]
@@ -561,8 +561,8 @@ if __name__ == '__main__':
                         if idx >= end_offset:
                             break
                         elements = [int(item) for item in line.strip('\r\n').split(',')]
-                        sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
-                        sampled_expected_count[idx] = np.full(shape=[cfg.negative_sample_size],
+                        sampled_candidates[idx - start_offset] = np.asarray(elements, dtype=np.int32)
+                        sampled_expected_count[idx - start_offset] = np.full(shape=[cfg.negative_sample_size],
                                                               fill_value=(1.0 - np.sum(
                                                                   context_prob[idx])) / cfg.negative_sample_size,
                                                               dtype=np.float32)
@@ -681,14 +681,14 @@ if __name__ == '__main__':
                         context.append(context_word_ids)
                         sub_context_prob = []
                         # word id not in dictionary
-                        if target[idx] not in word_count_dict:
+                        if target[idx - start_offset] not in word_count_dict:
                             for i in range(len(context_word_ids)):
                                 sub_context_prob.append(1.0 / float(cfg.context_window_size))
                         else:
                             accumulate_count = 0
                             for co_word in context_word_ids:
-                                co_name1 = target[idx] + cfg.coocur_separator + co_word
-                                co_name2 = co_word + cfg.coocur_separator + target[idx]
+                                co_name1 = target[idx - start_offset] + cfg.coocur_separator + co_word
+                                co_name2 = co_word + cfg.coocur_separator + target[idx - start_offset]
                                 if co_name1 in word_coocur_dict:
                                     sub_context_prob.append(word_coocur_dict[co_name1])
                                     accumulate_count += word_coocur_dict[co_name1]
@@ -716,7 +716,7 @@ if __name__ == '__main__':
                         if idx >= end_offset:
                             break
                         elements = [int(item) for item in line.strip('\r\n').split(',')]
-                        sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
+                        sampled_candidates[idx - start_offset] = np.asarray(elements, dtype=np.int32)
                     f.close()
 
                 iter_accuracy = PSGModelObj.validate(
