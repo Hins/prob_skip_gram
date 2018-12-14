@@ -24,8 +24,8 @@ flags.DEFINE_integer('batch_size', 1000, 'train batch size')
 flags.DEFINE_integer('accumulative_metric_count', 5, 'accumulative metric count')
 
 flags.DEFINE_float('stddev', 0.1, 'stddev for W initializer')
-flags.DEFINE_integer('negative_sample_size', 5, 'negative sample size')
-flags.DEFINE_integer('epoch_size', 10, 'epoch size')
+flags.DEFINE_integer('negative_sample_size', 15, 'negative sample size')
+flags.DEFINE_integer('epoch_size', 5, 'epoch size')
 flags.DEFINE_integer('early_stop_iter', 10, 'early stop iteration')
 
 flags.DEFINE_integer('sentiment_classification_num', 5, 'sentiment analysis classification number')
