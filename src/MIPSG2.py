@@ -653,7 +653,7 @@ if __name__ == '__main__':
                 counter = 0
                 context = []
                 context_prob = []
-                for idx, line in context_file:
+                for idx, line in enumerate(context_file):
                     context_word_ids = line.strip('\r\n').split(',')
                     context.append(context_word_ids)
                     sub_context_prob = []
@@ -689,7 +689,7 @@ if __name__ == '__main__':
 
                 counter = 0
                 sampled_candidates = np.zeros(shape=[cfg.batch_size, cfg.negative_sample_size], dtype=np.int32)
-                for idx, line in neg_file:
+                for idx, line in enumerate(neg_file):
                     elements = [int(item) for item in line.strip('\r\n').split(',')]
                     sampled_candidates[idx] = np.asarray(elements, dtype=np.int32)
                     counter += 1
