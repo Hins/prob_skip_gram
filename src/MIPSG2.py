@@ -86,7 +86,7 @@ class MIPSG2():
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
-                sys.stdout.write("self.parser_embed_weight shape is %s" % self.parser_embed_weight.get_shape())
+                sys.stdout.write("self.parser_embed_weight shape is %s\n" % self.parser_embed_weight.get_shape())
                 self.partofspeech_embed_weight = tf.get_variable(
                     'partofspeech_emb',
                     shape=(partofspeech_dictionary_size, cfg.partofspeech_embedding_size),
@@ -109,12 +109,12 @@ class MIPSG2():
                     parser_embed_list.append(tf.nn.embedding_lookup(self.parser_embed_weight, parser_item))
                 parser_embed_init = tf.reduce_sum(tf.squeeze(tf.convert_to_tensor(parser_embed_list)), axis=0)
                 # [cfg.batch_size, cfg.parser_embedding_size]
-                sys.stdout.write('parser_embed_init shape is %s' % parser_embed_init.get_shape())
+                sys.stdout.write('parser_embed_init shape is %s\n' % parser_embed_init.get_shape())
 
                 # calculate part-of-speech embedding
                 partofspeech_embed_init = tf.nn.embedding_lookup(self.partofspeech_embed_weight, self.partofspeech)
                 # [cfg.batch_size, cfg.partofspeech_embedding_size]
-                sys.stdout.write("partofspeech_embed_init shape is %s" % partofspeech_embed_init.get_shape())
+                sys.stdout.write("partofspeech_embed_init shape is %s\n" % partofspeech_embed_init.get_shape())
 
                 # seem dictionary state as sequential data, calculate by lstm model
                 dict_desc_split_list = tf.split(self.dictionary, cfg.dict_time_step, axis=1)
@@ -122,14 +122,14 @@ class MIPSG2():
                 for dict_desc_item in dict_desc_split_list:
                     dict_desc_embed_list.append(tf.nn.embedding_lookup(self.word_embed_weight, dict_desc_item))
                 dict_desc_embed_init = tf.reshape(tf.squeeze(tf.convert_to_tensor(dict_desc_embed_list)), shape=[cfg.batch_size, cfg.dict_time_step, -1])
-                sys.stdout.write("dict_desc_embed_init shape is %s" % dict_desc_embed_init.get_shape())
+                sys.stdout.write("dict_desc_embed_init shape is %s\n" % dict_desc_embed_init.get_shape())
 
                 cell = rnn.BasicLSTMCell(cfg.dict_lstm_hidden_size, name="dict_rnn")
                 init_state = cell.zero_state(cfg.batch_size, dtype=tf.float32)
                 dict_desc_outputs, dict_desc_final_state = tf.nn.dynamic_rnn(cell=cell, inputs=dict_desc_embed_init,
                                                                      initial_state=init_state, time_major=False)
-                sys.stdout.write("dict_desc_final_state.h shape is %s" % dict_desc_final_state.h.get_shape())
-                sys.stdout.write('dict_desc_outputs shape is %s, dict_desc_final_state shape[0] is %s, dict_desc_final_state shape[1] is %s'
+                sys.stdout.write("dict_desc_final_state.h shape is %s\n" % dict_desc_final_state.h.get_shape())
+                sys.stdout.write('dict_desc_outputs shape is %s, dict_desc_final_state shape[0] is %s, dict_desc_final_state shape[1] is %s\n'
                       % (dict_desc_outputs.get_shape(), dict_desc_final_state[0].get_shape(), dict_desc_final_state[1].get_shape()))
 
                 # calculate kb entity embedding by vector addition
@@ -138,7 +138,7 @@ class MIPSG2():
                 for kb_relation_item in kb_relation_split_list:
                     kb_relation_embed_list.append(tf.nn.embedding_lookup(self.kb_relation_embed_weight, kb_relation_item))
                 kb_relation_embed_init = tf.reduce_sum(tf.squeeze(tf.convert_to_tensor(kb_relation_embed_list)), axis=0)
-                sys.stdout.write("kb_relation_embed_init shape is %s" % kb_relation_embed_init.get_shape())
+                sys.stdout.write("kb_relation_embed_init shape is %s\n" % kb_relation_embed_init.get_shape())
 
             '''
             c_attention = tf.concat([parser_embed_init,
@@ -217,19 +217,19 @@ class MIPSG2():
                 dictionary_attention = tf.matmul(self.dictionary_attention_weight, tf.reshape(dict_desc_final_state.h,
                                                                                               shape=[cfg.dict_lstm_hidden_size, -1]))
                 # [attention_size, cfg.batch_size]
-                sys.stdout.write("dictionary_attention shape is %s" % dictionary_attention.get_shape())
+                sys.stdout.write("dictionary_attention shape is %s\n" % dictionary_attention.get_shape())
                 kb_relation_attention = tf.matmul(self.kb_relation_attention_weight, tf.reshape(kb_relation_embed_init,
                                                                                             shape=[cfg.kb_embedding_size, -1]))
                 # [attention_size, cfg.batch_size]
-                sys.stdout.write("kb_relation_attention shape is %s" % kb_relation_attention.get_shape())
+                sys.stdout.write("kb_relation_attention shape is %s\n" % kb_relation_attention.get_shape())
                 parser_attention = tf.matmul(self.parser_attention_weight, tf.reshape(parser_embed_init,
                                                                                             shape=[cfg.parser_embedding_size, -1]))
                 # [attention_size, cfg.batch_size]
-                sys.stdout.write("parser_attention shape is %s" % parser_attention.get_shape())
+                sys.stdout.write("parser_attention shape is %s\n" % parser_attention.get_shape())
                 partofspeech_attention = tf.matmul(self.partofspeech_attention_weight, tf.reshape(partofspeech_embed_init,
                                                                                             shape=[cfg.partofspeech_embedding_size, -1]))
                 # [attention_size, cfg.batch_size]
-                sys.stdout.write("partofspeech_attention shape is %s" % partofspeech_attention.get_shape())
+                sys.stdout.write("partofspeech_attention shape is %s\n" % partofspeech_attention.get_shape())
             # expand self.target_id into one hot space
             with tf.variable_scope("target_one_hot"):
                 target_split_list = tf.split(self.target_id, cfg.context_window_size, axis=1)
@@ -238,15 +238,15 @@ class MIPSG2():
                 for target in target_split_list:
                     target_embed_init.append(tf.nn.embedding_lookup(self.word_embed_weight, target))
                     one_hot_tensor = tf.squeeze(tf.one_hot(target, depth=word_dictionary_size, axis=1))
-                    sys.stdout.write("one_hot_tensor shape is %s" % one_hot_tensor.get_shape())
+                    sys.stdout.write("one_hot_tensor shape is %s\n" % one_hot_tensor.get_shape())
                     one_hot_list.append(one_hot_tensor)
                 # [cfg.batch_size, context_window_size, word_embedding_size]
                 target_embed_init = tf.reshape(tf.squeeze(tf.convert_to_tensor(target_embed_init)), shape=[cfg.batch_size, cfg.context_window_size, -1])
-                sys.stdout.write("target_embed_init shape is %s" % target_embed_init.get_shape())
+                sys.stdout.write("target_embed_init shape is %s\n" % target_embed_init.get_shape())
                 one_hot_list = tf.squeeze(tf.split(tf.reshape(tf.convert_to_tensor(one_hot_list), shape=[cfg.batch_size, cfg.context_window_size, -1]),
                                               num_or_size_splits=cfg.batch_size))
                 # [cfg.batch_size, cfg.context_window_size, word_dictionary_size]
-                sys.stdout.write("one_hot_list shape is %s" % one_hot_list.get_shape())
+                sys.stdout.write("one_hot_list shape is %s\n" % one_hot_list.get_shape())
 
             # target lstm calculation
             with tf.variable_scope("target"):
@@ -254,24 +254,24 @@ class MIPSG2():
                 target_init_state = target_cell.zero_state(cfg.batch_size, dtype=tf.float32)
                 target_outputs, target_final_state = tf.nn.dynamic_rnn(cell=target_cell, inputs=target_embed_init,
                                                                      initial_state=target_init_state, time_major=False)
-                sys.stdout.write("target_final_state.h shape is %s" % target_final_state.h.get_shape())
+                sys.stdout.write("target_final_state.h shape is %s\n" % target_final_state.h.get_shape())
                 # target_outputs shape is [cfg.batch_size, cfg.context_window_size, cfg.target_lstm_hidden_size]
-                sys.stdout.write('target_outputs shape is %s, target_final_state shape[0] is %s, target_final_state shape[1] is %s'
+                sys.stdout.write('target_outputs shape is %s, target_final_state shape[0] is %s, target_final_state shape[1] is %s\n'
                     % (target_outputs.get_shape(), target_final_state[0].get_shape(),
                        target_final_state[1].get_shape()))
 
             e_dictionary = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
                     tf.reshape(target_final_state.h, shape=[cfg.target_lstm_hidden_size, -1])), dictionary_attention))))
-            sys.stdout.write("e_dictionary shape is %s" % e_dictionary.get_shape())
+            sys.stdout.write("e_dictionary shape is %s\n" % e_dictionary.get_shape())
             e_kb_relation = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
                     tf.reshape(target_final_state.h, shape=[cfg.target_lstm_hidden_size,-1])), kb_relation_attention))))
-            sys.stdout.write("e_kb_relation shape is %s" % e_kb_relation.get_shape())
+            sys.stdout.write("e_kb_relation shape is %s\n" % e_kb_relation.get_shape())
             e_parser = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
                     tf.reshape(target_final_state.h,shape=[cfg.target_lstm_hidden_size,-1])), parser_attention))))
-            sys.stdout.write("e_parser shape is %s" % e_parser.get_shape())
+            sys.stdout.write("e_parser shape is %s\n" % e_parser.get_shape())
             e_partofspeech = tf.squeeze(tf.matmul(self.attention_v, tf.nn.tanh(tf.add(tf.matmul(self.attention_w,
                     tf.reshape(target_final_state.h,shape=[cfg.target_lstm_hidden_size,-1])), partofspeech_attention))))
-            sys.stdout.write("e_partofspeech shape is %s" % e_partofspeech.get_shape())
+            sys.stdout.write("e_partofspeech shape is %s\n" % e_partofspeech.get_shape())
             alpha_attention = tf.nn.softmax(tf.concat([tf.reshape(e_dictionary, shape=[cfg.batch_size, -1]),
                                                        tf.reshape(e_kb_relation, shape=[cfg.batch_size, -1]),
                                                        tf.reshape(e_parser, shape=[cfg.batch_size, -1]),
@@ -279,16 +279,16 @@ class MIPSG2():
                                             axis=1)
             alpha_attention_tile = tf.tile(alpha_attention, [1, cfg.attention_size])
             # [cfg.batch_size, 4 * cfg.attention_size]
-            sys.stdout.write("alpha_attention_tile shape is %s" % alpha_attention_tile.get_shape())
+            sys.stdout.write("alpha_attention_tile shape is %s\n" % alpha_attention_tile.get_shape())
             # [cfg.batch_size, 4]
-            sys.stdout.write("alpha_attention shape is %s" % alpha_attention.get_shape())
+            sys.stdout.write("alpha_attention shape is %s\n" % alpha_attention.get_shape())
             c_attention = tf.reduce_sum(tf.reshape(tf.multiply(tf.concat([tf.reshape(dictionary_attention, shape=[cfg.batch_size, -1]),
                                      tf.reshape(kb_relation_attention, shape=[cfg.batch_size, -1]),
                                      tf.reshape(parser_attention, shape=[cfg.batch_size, -1]),
                                      tf.reshape(partofspeech_attention, shape=[cfg.batch_size, -1])], axis=1),
                                       alpha_attention_tile), shape=[cfg.batch_size, 4, -1]), axis=1)
             # [cfg.batch_size, cfg.attention_size]
-            sys.stdout.write("c_attention shape is %s" % c_attention.get_shape())
+            sys.stdout.write("c_attention shape is %s\n" % c_attention.get_shape())
             # involve affine transformation parameters w and b to
             # align dimensions between attention result and final mapping
             self.proj_w = tf.get_variable(
@@ -320,7 +320,7 @@ class MIPSG2():
             softmax_layer = tf.nn.softmax(tf.nn.bias_add(
                 tf.matmul(c_attention, tf.reshape(self.proj_w, shape=[cfg.attention_size, -1])), self.proj_b), axis=1)
             # [cfg.batch_size, word_dictionary_size]
-            sys.stdout.write("softmax_layer shape is %s" % softmax_layer.get_shape())
+            sys.stdout.write("softmax_layer shape is %s\n" % softmax_layer.get_shape())
             # get prediction result from softmax according by target_id information
             final_softmax_tensor_list = tf.split(softmax_layer, num_or_size_splits=cfg.batch_size)
             sampled_candidates_list = tf.split(self.sampled_candidates, num_or_size_splits=cfg.batch_size)
@@ -331,9 +331,9 @@ class MIPSG2():
                     [tf.squeeze(tf.nn.embedding_lookup(tf.reshape(final_softmax_element, shape=[word_dictionary_size, -1]), target_id_list[idx])),
                     tf.squeeze(tf.nn.embedding_lookup(tf.reshape(final_softmax_element, shape=[word_dictionary_size, -1]), sampled_candidates_list[idx]))], axis=0))
             # [cfg.batch_size, cfg.context_window_size + cfg.negative_sample_size]
-            sys.stdout.write("comparison_list shape is %s" % tf.convert_to_tensor(comparison_list).get_shape())
+            sys.stdout.write("comparison_list shape is %s\n" % tf.convert_to_tensor(comparison_list).get_shape())
             comparison = tf.equal(tf.argmax(tf.convert_to_tensor(comparison_list), axis=1), tf.argmax(self.validation_target_prob, axis=1))
-            sys.stdout.write("comparison shape is %s" % comparison.get_shape())
+            sys.stdout.write("comparison shape is %s\n" % comparison.get_shape())
             self.accuracy = tf.reduce_mean(tf.cast(comparison, dtype=tf.float32))
             self.merged = tf.summary.merge_all()
 
@@ -388,22 +388,22 @@ class MIPSG2():
 
 if __name__ == '__main__':
     if len(sys.argv) < 18:
-        sys.stdout.write("MIPSG2 <target> <word_dict> <context> <part-of-speech> <part-of-speech_dict> <parser> "
+        sys.stderr.write("MIPSG2 <target> <word_dict> <context> <part-of-speech> <part-of-speech_dict> <parser> "
               "<parser_dict> <dictionary desc> <kb entity> <kb_entity_dict> <word count dict> <word coocur dict> <negative_sample_file>"
-              "<word_emb_output> <parser emb output> <partofspeech emb output> <kb emb output>")
+              "<word_emb_output> <parser emb output> <partofspeech emb output> <kb emb output>\n")
         sys.exit()
     [word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size,
      kb_relation_dictionary_size, word_count_dict, word_coocur_dict] = load_sample(
         sys.argv[2], sys.argv[5], sys.argv[7], sys.argv[10], sys.argv[11], sys.argv[12])
     sys.stdout.write("word_dictionary_size is %d, partofspeech_dictionary_size is %d, parser_dictionary_size is %d,"
-          "kb_relation_dictionary_size is %d" % (
+          "kb_relation_dictionary_size is %d\n" % (
           word_dictionary_size, partofspeech_dictionary_size, parser_dictionary_size, kb_relation_dictionary_size))
 
     total_sample_size = len(open(sys.argv[1]).readlines())
     total_batch_size = total_sample_size / cfg.batch_size
     train_set_size = int(total_batch_size * cfg.train_set_ratio)
 
-    sys.stdout.write('total_batch_size is %d, train_set_size is %d' %
+    sys.stdout.write('total_batch_size is %d, train_set_size is %d\n' %
           (total_batch_size, train_set_size))
 
     config = tf.ConfigProto(allow_soft_placement=True)
@@ -416,7 +416,7 @@ if __name__ == '__main__':
         variables_names = [v.name for v in tf.trainable_variables()]
         values = sess.run(variables_names)
         for k, v in zip(variables_names, values):
-            sys.stdout.write(k)
+            sys.stdout.write(k + '\n')
         trainable = False
 
         prev_avg_accu = 0.0
@@ -573,7 +573,7 @@ if __name__ == '__main__':
                 if math.isnan(iter_loss) is False:
                     loss_sum += iter_loss
             loss_sum /= train_set_size
-            sys.stdout.write("epoch_index %d, loss is %f" % (epoch_index, loss_sum))
+            sys.stdout.write("epoch_index %d, loss is %f\n" % (epoch_index, loss_sum))
             train_loss = PSGModelObj.get_loss_summary(loss_sum)
             train_writer.add_summary(train_loss, epoch_index + 1)
 
@@ -709,13 +709,13 @@ if __name__ == '__main__':
             accuracy /= (total_batch_size - train_set_size)
             if max_accu < accuracy:
                 max_accu = accuracy
-            sys.stdout.write("iter %d : accuracy %f" % (epoch_index, accuracy))
+            sys.stdout.write("iter %d : accuracy %f\n" % (epoch_index, accuracy))
             if epoch_index < cfg.early_stop_iter:
                 prev_avg_accu += accuracy
                 prev_loss += loss_sum
             elif epoch_index % cfg.early_stop_iter == 0 and epoch_index / cfg.early_stop_iter > 1:
                 if cur_avg_accu <= prev_avg_accu and prev_loss <= cur_loss:
-                    sys.stdout.write("training converge in epoch %d: prev_accu %f, cur_accu %f, prev_loss %f, cur_loss %f" %
+                    sys.stdout.write("training converge in epoch %d: prev_accu %f, cur_accu %f, prev_loss %f, cur_loss %f\n" %
                           (epoch_index, prev_avg_accu, cur_avg_accu, prev_loss, cur_loss))
                     break
                 else:
@@ -736,7 +736,7 @@ if __name__ == '__main__':
             dict_desc_file.close()
             kb_entity_file.close()
             neg_file.close()
-        sys.stdout.write('max_accu is %f' % max_accu)
+        sys.stdout.write('max_accu is %f\n' % max_accu)
 
         word_embed_weight = PSGModelObj.get_word_emb()
         output_embed_file = open(sys.argv[14], 'w')

@@ -80,7 +80,7 @@ class MIPSG():
                     initializer=tf.truncated_normal_initializer(stddev=cfg.stddev),
                     dtype='float32'
                 )
-                sys.stdout.write("self.parser_embed_weight shape is %s" % self.parser_embed_weight.get_shape())
+                sys.stdout.write("self.parser_embed_weight shape is %s\n" % self.parser_embed_weight.get_shape())
                 self.partofspeech_embed_weight = tf.get_variable(
                     'partofspeech_emb',
                     shape=(partofspeech_dictionary_size, cfg.partofspeech_embedding_size),
@@ -103,12 +103,12 @@ class MIPSG():
                     parser_embed_list.append(tf.nn.embedding_lookup(self.parser_embed_weight, parser_item))
                 parser_embed_init = tf.reduce_sum(tf.squeeze(tf.convert_to_tensor(parser_embed_list)), axis=0)
                 # [cfg.batch_size, cfg.parser_embedding_size]
-                sys.stdout.write('parser_embed_init shape is %s' % parser_embed_init.get_shape())
+                sys.stdout.write('parser_embed_init shape is %s\n' % parser_embed_init.get_shape())
 
                 # calculate part-of-speech embedding
                 partofspeech_embed_init = tf.nn.embedding_lookup(self.partofspeech_embed_weight, self.partofspeech)
                 # [cfg.batch_size, cfg.partofspeech_embedding_size]
-                sys.stdout.write("partofspeech_embed_init shape is %s" % partofspeech_embed_init.get_shape())
+                sys.stdout.write("partofspeech_embed_init shape is %s\n" % partofspeech_embed_init.get_shape())
 
                 # seem dictionary state as sequential data, calculate by lstm model
                 dict_desc_split_list = tf.split(self.dictionary, cfg.dict_time_step, axis=1)
@@ -116,14 +116,14 @@ class MIPSG():
                 for dict_desc_item in dict_desc_split_list:
                     dict_desc_embed_list.append(tf.nn.embedding_lookup(self.word_embed_weight, dict_desc_item))
                 dict_desc_embed_init = tf.reshape(tf.squeeze(tf.convert_to_tensor(dict_desc_embed_list)), shape=[cfg.batch_size, cfg.dict_time_step, -1])
-                sys.stdout.write("dict_desc_embed_init shape is %s" % dict_desc_embed_init.get_shape())
+                sys.stdout.write("dict_desc_embed_init shape is %s\n" % dict_desc_embed_init.get_shape())
 
                 cell = rnn.BasicLSTMCell(cfg.dict_lstm_hidden_size, name="dict_rnn")
                 init_state = cell.zero_state(cfg.batch_size, dtype=tf.float32)
                 dict_desc_outputs, dict_desc_final_state = tf.nn.dynamic_rnn(cell=cell, inputs=dict_desc_embed_init,
                                                                      initial_state=init_state, time_major=False)
-                sys.stdout.write("dict_desc_final_state.h shape is %s" % dict_desc_final_state.h.get_shape())
-                sys.stdout.write('dict_desc_outputs shape is %s, dict_desc_final_state shape[0] is %s, dict_desc_final_state shape[1] is %s'
+                sys.stdout.write("dict_desc_final_state.h shape is %s\n" % dict_desc_final_state.h.get_shape())
+                sys.stdout.write('dict_desc_outputs shape is %s, dict_desc_final_state shape[0] is %s, dict_desc_final_state shape[1] is %s\n'
                       % (dict_desc_outputs.get_shape(), dict_desc_final_state[0].get_shape(), dict_desc_final_state[1].get_shape()))
 
                 # calculate kb entity embedding by vector addition
@@ -132,13 +132,13 @@ class MIPSG():
                 for kb_relation_item in kb_relation_split_list:
                     kb_relation_embed_list.append(tf.nn.embedding_lookup(self.kb_relation_embed_weight, kb_relation_item))
                 kb_relation_embed_init = tf.reduce_sum(tf.squeeze(tf.convert_to_tensor(kb_relation_embed_list)), axis=0)
-                sys.stdout.write("kb_relation_embed_init shape is %s" % kb_relation_embed_init.get_shape())
+                sys.stdout.write("kb_relation_embed_init shape is %s\n" % kb_relation_embed_init.get_shape())
 
             middle_layer = tf.concat([parser_embed_init,
                                       partofspeech_embed_init,
                                       dict_desc_final_state.h,
                                       kb_relation_embed_init], axis=1)
-            sys.stdout.write("middle_layer shape is %s" % middle_layer.get_shape())
+            sys.stdout.write("middle_layer shape is %s\n" % middle_layer.get_shape())
 
             self.softmax_w = tf.get_variable(
                 'softmax_w',
@@ -173,7 +173,7 @@ class MIPSG():
                                                                    self.softmax_b),
                                           axis=1)
             # [cfg.batch_size, word_dictionary_size]
-            sys.stdout.write("softmax_layer shape is %s" % softmax_layer.get_shape())
+            sys.stdout.write("softmax_layer shape is %s\n" % softmax_layer.get_shape())
             final_softmax_tensor_list = tf.split(softmax_layer, num_or_size_splits=cfg.batch_size)
             sampled_candidates_list = tf.split(self.sampled_candidates, num_or_size_splits=cfg.batch_size)
             target_id_list = tf.split(self.target_id, num_or_size_splits=cfg.batch_size)
@@ -188,7 +188,7 @@ class MIPSG():
                                                 sampled_candidates_list[idx]))], axis=0))
             # [cfg.batch_size, cfg.context_window_size + cfg.negative_sample_size]
             comparison = tf.equal(tf.argmax(tf.convert_to_tensor(comparison_list), axis=1), tf.argmax(self.validation_target_prob, axis=1))
-            sys.stdout.write("comparison shape is %s" % comparison.get_shape())
+            sys.stdout.write("comparison shape is %s\n" % comparison.get_shape())
             self.accuracy = tf.reduce_mean(tf.cast(comparison, dtype=tf.float32))
             self.merged = tf.summary.merge_all()
 
@@ -272,7 +272,7 @@ if __name__ == '__main__':
         variables_names = [v.name for v in tf.trainable_variables()]
         values = sess.run(variables_names)
         for k, v in zip(variables_names, values):
-            sys.stdout.write(k)
+            sys.stdout.write(k + '\n')
         trainable = False
 
         prev_word_embed_weight = []
